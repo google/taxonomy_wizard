@@ -1,0 +1,209 @@
+"""Generates set of Taxonomy Specs based on JSON received from template Sheet."""
+
+import os
+from typing import Any, OrderedDict
+import re
+# from  urllib.request
+from taxonomy import Dimension, Field, Specification, SpecificationSet
+from collections import defaultdict
+import flask
+import json
+
+_SUCCESS_MESSAGE = 'Successfully generated tables.'
+
+
+def handle_request(request: flask.Request):
+  """Validation of request and creation of task.
+
+  Args:
+      request: Request object.
+
+  Returns:
+      Successful start response or error response.
+  """
+  # access_token = request.headers.get('Authorization')
+  # if not authorized(access_token):
+  #   logging.info(f'HTTP 403: Forbidden')
+  #   return 'Forbidden.', 403, None
+
+  request_json: dict[str, Any] = request.get_json()  # type: ignore
+  os.environ['GOOGLE_CLOUD_PROJECT'] = request_json['taxonomy_cloud_project_id']
+  try:
+    spec_set = create_objects(request_json)
+    response = push_to_database(request_json['action'], spec_set)
+  except Exception as e:
+    return str(e), 400, None
+  return response
+
+
+# TODO(blevitan): Add type info for `request_json``.
+def create_objects(request_json):
+  print("Entered Configurator. GCP_PROJECT via env=" +
+        os.environ.get('GCP_PROJECT', '"GCP_PROJECT" variable is not set.'))
+  print("Creating objects from request...")
+  print(json.dumps(request_json))
+  """Generates Tables from JSON request data."""
+  data = request_json['data']
+  cloud_project_id = request_json['taxonomy_cloud_project_id']
+  bigquery_dataset = request_json['taxonomy_bigquery_dataset']
+
+  fields_json, specs_json, dimensions_json = get_json_objects(data)
+
+  fields = create_taxonomy_fields(fields_json,
+                                  cloud_project_id,
+                                  bigquery_dataset)
+
+  dims_for_specs: dict[str, OrderedDict[str, Dimension]] =\
+      create_taxonomy_dimensions(dimensions_json, fields)
+
+  spec_set = create_taxonomy_spec_set(specs_json,
+                                      dims_for_specs,
+                                      fields,
+                                      cloud_project_id,
+                                      bigquery_dataset)
+
+  return spec_set
+
+
+def get_json_objects(data):
+  fields_json = []
+  specs_json = []
+  dimensions_json = []
+
+  for data_array in data:
+    if data_array['type'] == 'TaxonomyField':
+      fields_json = data_array['data']
+    elif data_array['type'] == 'TaxonomySpec':
+      specs_json = data_array['data']
+    elif data_array['type'] == 'TaxonomyDimension':
+      dimensions_json = data_array['data']
+    else:
+      raise Exception(
+          f"Error creating objects. Invalid request value '{data_array['type']}' for 'data[].type'.")
+  return fields_json, specs_json, dimensions_json
+
+
+def push_to_database(action: str, spec_set: SpecificationSet):
+  """Pushes Specification Set to Database. Updating/deleting per action."""
+  if action == 'overwrite':
+    spec_set.create_in_bigquery()
+    return {'response': _SUCCESS_MESSAGE}, 200, None
+  else:
+    return {'response': f"Invalid value '{action}' for 'action'."}, 400, None
+
+
+def create_taxonomy_fields(fields_json, cloud_project_id, bigquery_dataset)\
+        -> dict[str, Field]:
+  fields: dict[str, Field] = {}
+
+  for json in fields_json:
+    field = Field(
+        name=json['name'],
+        is_freeform_text=json['is_freeform_text'],
+        dictionary_url=json['dictionary_url'],
+        dictionary_sheet=json['dictionary_sheet'],
+        dictionary_range=json['dictionary_range'],
+        cloud_project_id=cloud_project_id,
+        bigquery_dataset=bigquery_dataset)
+    fields[json['name']] = field
+
+  return fields
+
+
+def create_taxonomy_dimensions(dimensions_json: Any,
+                               fields: dict[str, Field])\
+        -> dict[str, OrderedDict[str, Dimension]]:
+  dims_for_specs: defaultdict[str, OrderedDict[str, Dimension]] =\
+      defaultdict(lambda: OrderedDict())
+  regex_prefixes: dict[str, str] = {}
+
+  dim_json_sorted = sorted(
+      dimensions_json, key=lambda d: int(d['prefix_index']))
+
+  last_indexes = get_last_indexes(dim_json_sorted)
+
+  for json in dim_json_sorted:
+    dim, regex_prefix, regex_suffix = create_dimension(fields,
+                                                       last_indexes,
+                                                       regex_prefixes,
+                                                       json)
+
+    spec_name = json['taxonomy_spec_name']
+    dims_for_specs[spec_name][dim.name] = dim
+    regex_prefixes[spec_name] = f'{regex_prefix}(?:{regex_suffix}'
+
+  return dims_for_specs
+
+
+def create_dimension(fields, last_indexes, regex_prefixes, json):
+    spec_name = json['taxonomy_spec_name']
+    field: Field = fields[json['field_name']]
+    escaped_end_delimiter: str = re.escape(json['end_delimiter'])
+
+    if spec_name not in regex_prefixes:
+      regex_prefixes[spec_name] = "CONCAT(r'^"
+    regex_prefix = regex_prefixes[spec_name]
+
+    if not json['end_delimiter']:
+        if not int(json['prefix_index']) == last_indexes[spec_name]:
+          regex_suffix = f"', D_{json['prefix_index']}.id, ')"
+          requires_crossjoin_validation = True
+        else:
+          regex_suffix = '.*)$'
+          requires_crossjoin_validation = False
+    else:
+      regex_suffix = f'[^{escaped_end_delimiter}]*?){escaped_end_delimiter}'
+      requires_crossjoin_validation = False
+
+    if int(json['prefix_index']) == last_indexes[spec_name]:
+      extra_data_regex = f"{regex_prefix}(?:{regex_suffix}(.*)$')"
+    else:
+      extra_data_regex = ''
+
+    dim = Dimension(
+        name=field.normalized_name,
+        index=int(json['prefix_index']),
+        end_delimiter=json['end_delimiter'],
+        field_spec=field,
+        regex_match_expression=f"{regex_prefix}({regex_suffix}')",
+        extra_data_regex=extra_data_regex,
+        requires_crossjoin_validation=requires_crossjoin_validation)
+
+    return dim, regex_prefix, regex_suffix
+
+
+def get_last_indexes(dim_json_sorted):
+    last_index: defaultdict[str, int] = defaultdict(lambda: -1)
+    for json in dim_json_sorted:
+      spec_name = json['taxonomy_spec_name']
+
+      if int(json['prefix_index']) > last_index[spec_name]:
+        last_index[spec_name] = int(json['prefix_index'])
+    return last_index
+
+
+def create_taxonomy_spec_set(specs_json: Any,
+                             dims_for_specs: dict[str, OrderedDict[str,
+                                                                   Dimension]],
+                             fields: dict[str, Field],
+                             cloud_project_id: str,
+                             bigquery_dataset: str):
+  spec_set: SpecificationSet = SpecificationSet(
+      fields=fields,
+      cloud_project_id=cloud_project_id,
+      bigquery_dataset=bigquery_dataset)
+
+  for json in specs_json:
+    if json['name'] in dims_for_specs:
+      dimensions = dims_for_specs[json['name']]
+      spec = Specification(
+          name=json['name'],
+          field_structure_type_val=json['field_structure_type'],
+          dimensions=dimensions)
+      spec_set.specs[spec.name] = spec
+
+  return spec_set
+
+
+if __name__ == '__main__':
+  pass

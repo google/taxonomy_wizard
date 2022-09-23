@@ -1,0 +1,6 @@
+__pycache__
+.pytest_cache
+.vscode
+venv
+validator.code-workspace
+*test.py
