@@ -12,9 +12,31 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
+# Deploy validator
 
-# Deploy configurator
 PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
+
+gcloud iam service-accounts create taxonomy-wizard-validator \
+    --description="Service account for Taxonomy Wizard Validator component." \
+    --display-name="Taxonomy Wizard Validator Service Account"
+
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member="serviceAccount:taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/bigquery.dataViewer"
+
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member="serviceAccount:taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/bigquery.jobUser"
+
+gcloud services enable run.googleapis.com
+gcloud services enable artifactregistry.googleapis.com
+gcloud services enable cloudbuild.googleapis.com
+gcloud services enable cloudfunctions.googleapis.com
+gcloud services enable iam.googleapis.com
+gcloud services enable bigquery.googleapis.com
+gcloud services enable drive.googleapis.com
+
 
 gcloud functions deploy validator \
 --gen2 \
@@ -24,4 +46,14 @@ gcloud functions deploy validator \
 --entry-point=handle_request \
 --service-account=taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com \
 --trigger-http \
+--no-allow-unauthenticated \
 --ignore-file=.gcloudignore
+
+echo "Make sure you move the Validtor Plugin's Apps Script to the same project you deployed to."
+echo "You may need to configure the OAuth Consent screen when doing this:"
+echo "  User Type: Internal."
+echo "  Enter App name (e.g., 'Taxonomy Wizard')."
+echo "  Add 'google.com' as an 'Authorized Domain'."
+echo "  Enter Support and Contact email address (e.g., your email address)."
+echo ""
+echo "After you have done the above, please rerun this script."

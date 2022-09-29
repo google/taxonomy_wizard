@@ -1,4 +1,20 @@
-""" Validates names submitted according to specified Taxonomy."""
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License")
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https: // www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+# Validates names submitted according to specified Taxonomy.
+
+
 import json
 import os
 from typing import Any
@@ -11,10 +27,10 @@ import flask
 def get_bigquery_client() -> bigquery.Client:
   credentials, project = auth.default(
       scopes=[
-          "https://www.googleapis.com/auth/drive",
-          "https://www.googleapis.com/auth/bigquery",
-          "https://www.googleapis.com/auth/cloud-platform",
-          "https://www.googleapis.com/auth/spreadsheets",
+          'https://www.googleapis.com/auth/drive',
+          'https://www.googleapis.com/auth/bigquery',
+          'https://www.googleapis.com/auth/cloud-platform',
+          'https://www.googleapis.com/auth/spreadsheets',
       ]
   )
   return bigquery.Client(credentials=credentials, project=project)
@@ -56,7 +72,6 @@ def list_specs(data: _RequestJson) -> _ListSpecsResponseJson:
 
 
 def validate_names(data: _RequestJson) -> _ValidateNamesResponseJson:
-  print('Entered Validator...')
   names: list[str] = get_entity_names(data)
   names_subclause: str = get_names_subclause(names)
   validation_query: str = get_validation_query(data)
@@ -80,7 +95,6 @@ def get_json_data(request):
 
 
 def get_entity_names(data) -> list[str]:
-  print("get_entity_names")
   #TODO(blevitan): strip matrix info from JSON
   names_matrix: list[dict[str, str | int]] = data['names']
   names: list[str] = [obj['value'] for obj in names_matrix]  # type: ignore
@@ -90,17 +104,15 @@ def get_entity_names(data) -> list[str]:
 
 
 def get_names_subclause(names):
-  return f"UNNEST(ARRAY<STRING>{names})"
+  return f'UNNEST(ARRAY<STRING>{names})'
 
 
 def get_validation_query(data) -> str:
-  print("get_validation_query")
   client: bigquery.Client = get_bigquery_client()
   query = "SELECT MAX(validation_query_template) AS validation_query_template\n"\
       + f"FROM `{data['taxonomy_cloud_project_id']}.{data['taxonomy_bigquery_dataset']}.specifications`\n"\
       + f"WHERE name = '{data['spec_name']}'"
   validation_query_template: str = next(client.query(query).result())[0]
-  print("query: " + query)
   return validation_query_template
 
 
@@ -113,7 +125,6 @@ def get_immediate_statement(validation_query, entity_names: str):
 
 
 def get_validation_data(query: str) -> dict[str, str]:
-  print("get_validation_data")
   rows = get_bigquery_client().query(query).result()
   return {row['name']: row['validation_message'] for row in rows}
 

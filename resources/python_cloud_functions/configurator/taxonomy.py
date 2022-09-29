@@ -1,12 +1,24 @@
-# Lint as: python3
-"""Classes required to create set of Taxonomy Specs.
+# Copyright 2022 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License")
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https: // www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+#
+# Classes required to create set of Taxonomy Specs.
+#
+# Hierarchy:
+# TaxonomySpecSet
+#   ∟ TaxonomySpec
+#       ∟ TaxonomyDimension
 
-Hierarchy:
-TaxonomySpecSet
-  ∟ TaxonomySpec
-      ∟ TaxonomyDimension
-
-"""
 import json
 import os
 from random import random
@@ -16,22 +28,23 @@ import enum
 import re
 from typing import OrderedDict
 from attrs import define, field
-from google.cloud import bigquery  # type: ignore
 from google import auth
+from google.cloud import bigquery  # type: ignore
+from google.cloud.exceptions import NotFound
 
 _DELIMITED_VALIDATOR_FILENAME: str = 'delimited_validator.sql'
 _NUM_RETRIES: int = 5
 
-#TODO(blevitan): Refactor as singleton.
+# TODO(blevitan): Refactor as singleton.
 
 
 def get_bigquery_client() -> bigquery.Client:
   credentials, project = auth.default(
       scopes=[
-          "https://www.googleapis.com/auth/drive",
-          "https://www.googleapis.com/auth/bigquery",
-          "https://www.googleapis.com/auth/cloud-platform",
-          "https://www.googleapis.com/auth/spreadsheets",
+          'https://www.googleapis.com/auth/drive',
+          'https://www.googleapis.com/auth/bigquery',
+          'https://www.googleapis.com/auth/cloud-platform',
+          'https://www.googleapis.com/auth/spreadsheets',
       ]
   )
   return bigquery.Client(credentials=credentials, project=project)
@@ -45,19 +58,19 @@ class FieldStructureType(enum.Enum):
 
 class TaxonomyLevel(enum.Enum):
   # ADVERTISER = 1
-  CAMPAIGN = 2
+  CAMPAIGN = 1  # TODO(blevitan): change to 2 when uncommenting others
   # INSERTION_ORDER = 3
   # LINE_ITEM = 4
   # PLACEMENT = 5
 
 
 # class IdField(enum.Enum):
-#   PARTNER_ID = 1
-#   PARTNER_NAME = 2
-  # ACCOUNT_ID = 3
-  # ACCOUNT_NAME = 4
-  # ADVERTISER_ID = 5
-  # ADVERTISER_NAME = 6
+# PARTNER_ID = 1
+# PARTNER_NAME = 2
+# ACCOUNT_ID = 3
+# ACCOUNT_NAME = 4
+# ADVERTISER_ID = 5
+# ADVERTISER_NAME = 6
 
 
 @define(auto_attribs=True)
@@ -85,7 +98,8 @@ class Field:
   def create_linked_bigquery_table(self):
     """Generates (or overwrites) a BQ linked table."""
     table_def = bigquery.Table(self.table_id)
-    table_def.schema = [bigquery.SchemaField('id', 'STRING', mode='NULLABLE')]
+    table_def.schema = [bigquery.SchemaField(
+        'id', 'STRING', mode='NULLABLE')]
 
     external_config = bigquery.ExternalConfig('GOOGLE_SHEETS')
     external_config.source_uris = [self.dictionary_url]
@@ -133,11 +147,11 @@ class Specification:
   validation_query_template: str = field(init=False, default='')
 
   def __attrs_post_init__(self):
-    if self.field_structure_type_val.upper() == "DELIMITED":
+    if self.field_structure_type_val.upper() == 'DELIMITED':
       self.field_structure_type = FieldStructureType.DELIMITED
     else:
       raise Exception(
-          f'Unsupported `field_structure_type` "{self.field_structure_type_val} in Spec "{self.name}".')
+        f'Unsupported `field_structure_type` "{self.field_structure_type_val} in Spec "{self.name}".')
 
   def create_validation_query_template(self, renderer: JinjaRenderer):
     if self.field_structure_type == FieldStructureType.DELIMITED:
@@ -146,7 +160,7 @@ class Specification:
                                             spec=self)
     else:
       raise Exception(
-          f'Unsupported `field_structure_type` "{self.field_structure_type} in Spec "{self.name}".')
+        f'Unsupported `field_structure_type` "{self.field_structure_type} in Spec "{self.name}".')
 
 
 @define(auto_attribs=True)
@@ -159,18 +173,30 @@ class SpecificationSet:
   specs: dict[str, Specification] = field(factory=dict)
   fields: dict[str, Field] = field(factory=dict)
   _specifications_table_name: str = field(default='specifications')
+  _specifications_dataset_location: str = field(default='US')
 
   def table_ref(self) -> bigquery.TableReference:
     return bigquery.TableReference(
-        bigquery.DatasetReference(self.cloud_project_id,
-                                  self.bigquery_dataset),
-        self._specifications_table_name)
+      bigquery.DatasetReference(self.cloud_project_id,
+                                self.bigquery_dataset),
+      self._specifications_table_name)
 
   def create_in_bigquery(self):
     """Generates taxonomy tables, etc... in bigquery."""
+    self._create_dataset()
     self._create_linked_tables_for_fields()
     self._create_spec_validation_query_templates()
     self._create_specs_table()
+
+  def _create_dataset(self):
+    client: bigquery.Client = get_bigquery_client()
+    try:
+        client.get_dataset(f'{self.cloud_project_id}.{self.bigquery_dataset}')
+    except NotFound:
+      dataset = bigquery.Dataset(
+          f'{self.cloud_project_id}.{self.bigquery_dataset}')
+      dataset.location = self._specifications_dataset_location
+      dataset = get_bigquery_client().create_dataset(dataset, timeout=30)
 
   def _create_linked_tables_for_fields(self):
     for field in self.fields.values():
@@ -178,29 +204,30 @@ class SpecificationSet:
         field.create_linked_bigquery_table()
 
   def _create_spec_validation_query_templates(self):
-      renderer = JinjaRenderer()
-      for spec in self.specs.values():
-        spec.create_validation_query_template(renderer)
+    renderer = JinjaRenderer()
+    for spec in self.specs.values():
+      spec.create_validation_query_template(renderer)
 
   def _create_specs_table(self):
     client: bigquery.Client = get_bigquery_client()
 
     job_config = bigquery.LoadJobConfig()
     job_config.source_format = bigquery.SourceFormat.NEWLINE_DELIMITED_JSON
+    job_config.write_disposition = 'WRITE_TRUNCATE'
     job_config.schema = [
-        bigquery.SchemaField("name", "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("field_structure_type",
-                             "STRING", mode="REQUIRED"),
-        bigquery.SchemaField("validation_query_template",
-                             "STRING", mode="REQUIRED"), ]
+      bigquery.SchemaField('name', 'STRING', mode='REQUIRED'),
+      bigquery.SchemaField('field_structure_type',
+                            'STRING', mode='REQUIRED'),
+      bigquery.SchemaField('validation_query_template',
+                            'STRING', mode='REQUIRED'), ]
 
     data: list[dict[str, str]] = [
-        {
-            'name': spec.name,
-            'field_structure_type': str(spec.field_structure_type_val),
-            'validation_query_template': spec.validation_query_template
-        }
-        for spec in self.specs.values()]
+      {
+          'name': spec.name,
+          'field_structure_type': str(spec.field_structure_type_val),
+          'validation_query_template': spec.validation_query_template
+      }
+      for spec in self.specs.values()]
 
     job = client.load_table_from_json(data,
                                       self.table_ref(),
