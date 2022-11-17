@@ -19,6 +19,7 @@
 #   ∟ TaxonomySpec
 #       ∟ TaxonomyDimension
 
+import datetime
 import json
 import os
 from random import random
@@ -35,20 +36,6 @@ from google.cloud.exceptions import NotFound
 _DELIMITED_VALIDATOR_FILENAME: str = 'delimited_validator.sql'
 _NUM_RETRIES: int = 5
 
-# TODO(blevitan): Refactor as singleton.
-
-
-def get_bigquery_client() -> bigquery.Client:
-  credentials, project = auth.default(
-      scopes=[
-          'https://www.googleapis.com/auth/drive',
-          'https://www.googleapis.com/auth/bigquery',
-          'https://www.googleapis.com/auth/cloud-platform',
-          'https://www.googleapis.com/auth/spreadsheets',
-      ]
-  )
-  return bigquery.Client(credentials=credentials, project=project)
-
 
 class FieldStructureType(enum.Enum):
   DELIMITED = 1
@@ -64,15 +51,6 @@ class TaxonomyLevel(enum.Enum):
   # PLACEMENT = 5
 
 
-# class IdField(enum.Enum):
-# PARTNER_ID = 1
-# PARTNER_NAME = 2
-# ACCOUNT_ID = 3
-# ACCOUNT_NAME = 4
-# ADVERTISER_ID = 5
-# ADVERTISER_NAME = 6
-
-
 @define(auto_attribs=True)
 class Field:
   """Field for use with a Dimension."""
@@ -83,6 +61,7 @@ class Field:
   dictionary_range: str = field()
   cloud_project_id: str = field()
   bigquery_dataset: str = field()
+  bq_client: bigquery.Client = field()
 
   normalized_name: str = field(init=False)
   table_id: str = field(init=False)
@@ -112,7 +91,7 @@ class Field:
     table_def.external_data_configuration = external_config
 
     # TODO(blevitan): Pass this in to the constructor (everywhere else too).
-    client = get_bigquery_client()
+    client = self.bq_client
     client.delete_table(self.table_id, not_found_ok=True)
 
     client.create_table(table_def)
@@ -134,24 +113,36 @@ class Dimension:
 class Specification:
   """Contains structure of taxonomy."""
   name: str = field()
-  # id_field: IdField = field()
-  # advertiser_name: str = field()
-  # gmp_product: str = field()
-  # id_field_value: str = field()
-  # taxonomy_level: TaxonomyLevel = field()
-  # start_date: datetime.date = field()
-  # end_date: datetime.date = field()
   field_structure_type_val: str = field()
+  product: str = field(default=None)
+  customer_owner_id: str = field(default=None)
+  taxonomy_level: TaxonomyLevel = field(default=None)
+  _advertiser_ids: str = field(default=None)
+  _campaign_ids: str = field(default=None)
+  min_start_date: datetime.date = field(default=None)
+  max_start_date: datetime.date = field(default=None)
+  min_end_date: datetime.date = field(default=None)
+  max_end_date: datetime.date = field(default=None)
   field_structure_type: FieldStructureType = field(init=False)
   dimensions: OrderedDict[str, Dimension] = field(factory=list)
   validation_query_template: str = field(init=False, default='')
+  # Set in post_init
+  advertiser_ids: list[int] = field(init=False, factory=list)
+  campaign_ids: list[int] = field(init=False, factory=list)
 
   def __attrs_post_init__(self):
+    if self._advertiser_ids:
+      self.advertiser_ids = [int(v) for v in self._advertiser_ids.split(',')]
+
+    if self._campaign_ids:
+      self.campaign_ids = [int(v) for v in self._campaign_ids.split(',')]
+
     if self.field_structure_type_val.upper() == 'DELIMITED':
       self.field_structure_type = FieldStructureType.DELIMITED
     else:
       raise Exception(
-        f'Unsupported `field_structure_type` "{self.field_structure_type_val} in Spec "{self.name}".')
+          f'Unsupported `field_structure_type` "{self.field_structure_type_val} in Spec "{self.name}".'
+      )
 
   def create_validation_query_template(self, renderer: JinjaRenderer):
     if self.field_structure_type == FieldStructureType.DELIMITED:
@@ -160,7 +151,8 @@ class Specification:
                                             spec=self)
     else:
       raise Exception(
-        f'Unsupported `field_structure_type` "{self.field_structure_type} in Spec "{self.name}".')
+          f'Unsupported `field_structure_type` "{self.field_structure_type} in Spec "{self.name}".'
+      )
 
 
 @define(auto_attribs=True)
@@ -168,8 +160,7 @@ class SpecificationSet:
   """Set of Specifications."""
   cloud_project_id: str = field()
   bigquery_dataset: str = field()
-  # TODO(blevitan): Uncomment once implemented in Phase 3.
-  # source_report_table_locations: List[str] = None
+  bq_client: bigquery.Client = field()
   specs: dict[str, Specification] = field(factory=dict)
   fields: dict[str, Field] = field(factory=dict)
   _specifications_table_name: str = field(default='specifications')
@@ -177,9 +168,8 @@ class SpecificationSet:
 
   def table_ref(self) -> bigquery.TableReference:
     return bigquery.TableReference(
-      bigquery.DatasetReference(self.cloud_project_id,
-                                self.bigquery_dataset),
-      self._specifications_table_name)
+        bigquery.DatasetReference(self.cloud_project_id, self.bigquery_dataset),
+        self._specifications_table_name)
 
   def create_in_bigquery(self):
     """Generates taxonomy tables, etc... in bigquery."""
@@ -189,14 +179,14 @@ class SpecificationSet:
     self._create_specs_table()
 
   def _create_dataset(self):
-    client: bigquery.Client = get_bigquery_client()
     try:
-        client.get_dataset(f'{self.cloud_project_id}.{self.bigquery_dataset}')
+      self.bq_client.get_dataset(
+          f'{self.cloud_project_id}.{self.bigquery_dataset}')
     except NotFound:
       dataset = bigquery.Dataset(
           f'{self.cloud_project_id}.{self.bigquery_dataset}')
       dataset.location = self._specifications_dataset_location
-      dataset = get_bigquery_client().create_dataset(dataset, timeout=30)
+      dataset = self.bq_client.create_dataset(dataset, timeout=30)
 
   def _create_linked_tables_for_fields(self):
     for field in self.fields.values():
@@ -209,29 +199,44 @@ class SpecificationSet:
       spec.create_validation_query_template(renderer)
 
   def _create_specs_table(self):
-    client: bigquery.Client = get_bigquery_client()
-
     job_config = bigquery.LoadJobConfig()
     job_config.source_format = bigquery.SourceFormat.NEWLINE_DELIMITED_JSON
     job_config.write_disposition = 'WRITE_TRUNCATE'
     job_config.schema = [
-      bigquery.SchemaField('name', 'STRING', mode='REQUIRED'),
-      bigquery.SchemaField('field_structure_type',
-                            'STRING', mode='REQUIRED'),
-      bigquery.SchemaField('validation_query_template',
-                            'STRING', mode='REQUIRED'), ]
+        bigquery.SchemaField('name', 'STRING', mode='REQUIRED'),
+        bigquery.SchemaField('field_structure_type', 'STRING', mode='REQUIRED'),
+        bigquery.SchemaField('validation_query_template',
+                             'STRING',
+                             mode='REQUIRED'),
+        bigquery.SchemaField('product', 'STRING', mode='NULLABLE'),
+        bigquery.SchemaField('customer_owner_id', 'STRING', mode='NULLABLE'),
+        bigquery.SchemaField('taxonomy_level', 'STRING', mode='NULLABLE'),
+        bigquery.SchemaField('advertiser_ids', 'INT64', mode='REPEATED'),
+        bigquery.SchemaField('campaign_ids', 'INT64', mode='REPEATED'),
+        bigquery.SchemaField('min_start_date', 'STRING', mode='NULLABLE'),
+        bigquery.SchemaField('max_start_date', 'STRING', mode='NULLABLE'),
+        bigquery.SchemaField('min_end_date', 'STRING', mode='NULLABLE'),
+        bigquery.SchemaField('max_end_date', 'STRING', mode='NULLABLE'),
+    ]
 
-    data: list[dict[str, str]] = [
-      {
-          'name': spec.name,
-          'field_structure_type': str(spec.field_structure_type_val),
-          'validation_query_template': spec.validation_query_template
-      }
-      for spec in self.specs.values()]
+    data: list[dict[str, str]] = [{
+        'name': spec.name,
+        'field_structure_type': str(spec.field_structure_type_val),
+        'validation_query_template': spec.validation_query_template,
+        'product': spec.product,
+        'customer_owner_id': spec.customer_owner_id,
+        'taxonomy_level': spec.taxonomy_level,
+        'advertiser_ids': spec.advertiser_ids,
+        'campaign_ids': spec.campaign_ids,
+        'min_start_date': spec.start_date,
+        'max_start_date': spec.start_date,
+        'min_end_date': spec.end_date,
+        'max_end_date': spec.end_date,
+    } for spec in self.specs.values()]
 
-    job = client.load_table_from_json(data,
-                                      self.table_ref(),
-                                      job_config=job_config)
+    job = self.bq_client.load_table_from_json(data,
+                                              self.table_ref(),
+                                              job_config=job_config)
 
     errors = job.result().errors
 

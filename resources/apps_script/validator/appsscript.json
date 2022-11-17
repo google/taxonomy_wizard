@@ -1,0 +1,36 @@
+{
+  "timeZone": "America/New_York",
+  "exceptionLogging": "STACKDRIVER",
+  "runtimeVersion": "V8",
+  "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "BigQuery",
+        "serviceId": "bigquery",
+        "version": "v2"
+      }
+    ]
+  },
+  "oauthScopes": [
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/spreadsheets.currentonly",
+    "https://www.googleapis.com/auth/script.container.ui",
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/drive",
+    "openid"
+  ],
+  "addOns": {
+    "common": {
+      "name": "Taxonomy Wizard -",
+      "logoUrl": "https://www.maxpixel.net/static/photo/1x/Magician-Mystery-Magic-Wizard-Magical-Trick-1454385.png",
+      "layoutProperties": {
+        "primaryColor": "#2772ed"
+      }
+    },
+    "sheets": {
+      "homepageTrigger": {
+        "runFunction": "onOpen"
+      }
+    }
+  }
+}
