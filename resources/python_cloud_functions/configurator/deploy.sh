@@ -51,6 +51,11 @@ gcloud functions deploy configurator \
 --no-allow-unauthenticated \
 --ignore-file=.gcloudignore
 
+  echo "█████████████████████████████████████████████████████████████████████████"
+  echo "██                                                                     ██"
+  echo "██                      DEPLOYMENT SCRIPT COMPLETE                     ██"
+  echo "██                                                                     ██"
+  echo "█████████████████████████████████████████████████████████████████████████"
 echo "Make sure you move the Configurator sheet's Apps Script to the same project you deployed to."
 echo "You may need to configure the OAuth Consent screen when doing this:"
 echo "  User Type: Internal."

@@ -1,14 +1,15 @@
 {
   "timeZone": "America/New_York",
   "dependencies": {
+    "enabledAdvancedServices": []
   },
   "exceptionLogging": "STACKDRIVER",
   "runtimeVersion": "V8",
   "oauthScopes": [
-  "https://www.googleapis.com/auth/script.container.ui",
-  "https://www.googleapis.com/auth/cloud-platform",
-  "https://www.googleapis.com/auth/script.external_request",
-  "https://www.googleapis.com/auth/spreadsheets.currentonly",
-  "openid"
-]
+    "https://www.googleapis.com/auth/script.container.ui",
+    "https://www.googleapis.com/auth/cloud-platform",
+    "https://www.googleapis.com/auth/script.external_request",
+    "https://www.googleapis.com/auth/spreadsheets.currentonly",
+    "openid"
+  ]
 }

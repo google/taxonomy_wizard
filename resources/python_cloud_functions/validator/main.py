@@ -14,13 +14,13 @@
 #
 """ Validates names submitted according to specified Taxonomy."""
 
+from collections.abc import Sequence
 from dataclasses import field
+import flask
 import os
 from google.cloud import bigquery
 from google import auth
-import flask
-from sources import RawJsonValidatorSource
-from sources.source import ProductSourceFilter, ValidatorProductSource, NamesInput, NamesInput, RequestJson
+from sources.source import RawJsonValidatorSource, ProductSourceFilter, ValidatorProductSource, NamesInput, NamesInput, RequestJson
 from sources.campaign_manager.campaign_manager_source import CampaignManagerValidatorSource
 
 _ListSpecsResponseJson = list[dict[str, str]]
@@ -28,8 +28,16 @@ _ValidateNamesResponseJson = dict[str, list[NamesInput]]
 
 VALIDATION_RESULTS_TABLE: str = 'validation_results'
 
-_bq_client: bigquery.Client = None
-
+_bq_client: bigquery.Client = False
+_BQ_CLIENT_SCOPES: Sequence[str] = [
+    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/bigquery',
+    'https://www.googleapis.com/auth/cloud-platform',
+    'https://www.googleapis.com/auth/spreadsheets',
+    'https://www.googleapis.com/auth/dfareporting',
+    'https://www.googleapis.com/auth/dfatrafficking',
+    'https://www.googleapis.com/auth/ddmconversions',
+]
 
 def handle_request(request: flask.Request):
   """Validation of request and creation of task.
@@ -46,9 +54,9 @@ def handle_request(request: flask.Request):
     if data['action'] == 'list_specs':
       return list_specs(data)
     elif data['action'] == 'validate_everything':
-      return validate_everything(data)
+      return validate_all_specs(data)
     elif data['action'] == 'validate_names':
-      return validate_names(data)
+      return validate_entity_values(data)
     else:
       raise ValueError('Invalid value {data["action"]} passed for "action"')
   except Exception as e:
@@ -61,61 +69,60 @@ def list_specs(data: RequestJson) -> _ListSpecsResponseJson:
   return [{'name': row['name']} for row in rows]
 
 
-def validate_everything(data: RequestJson):
+def validate_all_specs(data: RequestJson):
   project_id: str = data['taxonomy_cloud_project_id']
   dataset: str = data['taxonomy_bigquery_dataset']
-
-  spec_sets = get_spec_sets(project_id, dataset)
+  specs = get_specifications(project_id, dataset)
 
   validation_results = []
-  for spec_set in spec_sets:
+  for spec in specs:
     validator: ValidatorProductSource = choose_validator(
-        spec_set, project_id, dataset)
-    names = validator.fetch_values_to_validate()
-    just_names = validator.extract_names(names, 'name')
-    validated_data = validator.validate_values(just_names)
-    results: list[NamesInput] = validator.merge_input_and_output(
-        names, validated_data, spec_set)
-
+        spec, project_id, dataset)
+    results: Sequence[NamesInput] = validator.validate()
     validation_results.extend(results)
 
   persist_results(validation_results, project_id, dataset)
 
 
-def get_spec_sets(project_id: str, dataset: str):
+def get_specifications(project_id: str, dataset: str):
   client: bigquery.Client = bq_client()
   query = "SELECT\n"\
-        "  name AS spec_set_name,\n"\
+        "  name,\n"\
         "  product,\n"\
         "  customer_owner_id,\n"\
-        "  taxonomy_level,\n"\
+        "  entity_type,\n"\
         "  advertiser_ids,\n"\
         "  campaign_ids,\n"\
-        "  start_date,\n"\
-        "  end_date,\n"\
+        "  min_start_date,\n"\
+        "  max_start_date,\n"\
+        "  min_end_date,\n"\
+        "  max_end_date,\n"\
         "  validation_query_template,\n"\
        f"FROM `{project_id}.{dataset}.specifications`"
-  spec_sets = client.query(query).result()
-  return spec_sets
+  specs = client.query(query).result()
+  return specs
 
 
-def choose_validator(spec_set, cloud_project_id, bigquery_dataset):
-  product = spec_set['product']
+def choose_validator(spec, cloud_project_id, bigquery_dataset):
+  product = spec['product']
 
   if product == 'Campaign Manager':
-    filter = ProductSourceFilter(
-        customer_owner_id=spec_set['customer_owner_id'],
-        advertiser_ids=spec_set['advertiser_ids'],
-        campaign_ids=spec_set['campaign_ids'],
-        start_date=spec_set['start_date'],
-        end_date=spec_set['end_date'])
+    filter = ProductSourceFilter(customer_owner_id=spec['customer_owner_id'],
+                                 advertiser_ids=spec['advertiser_ids'],
+                                 campaign_ids=spec['campaign_ids'],
+                                 min_start_date=spec['min_start_date'],
+                                 max_start_date=spec['max_start_date'],
+                                 min_end_date=spec['min_end_date'],
+                                 max_end_date=spec['max_end_date'])
 
     validator: ValidatorProductSource = CampaignManagerValidatorSource(
-        spec_set_name=spec_set['spec_set_name'],
-        product=spec_set['product'],
-        taxonomy_level=spec_set['taxonomy_level'],
-        project_id=cloud_project_id,
+        cloud_project=cloud_project_id,
         bigquery_dataset=bigquery_dataset,
+        bq_client=bq_client(),
+        spec_name=spec['name'],
+        product=spec['product'],
+        entity_type=spec['entity_type'],
+        base_row_data=spec,
         filter=filter)
 
   elif product in ('DV360', 'Google Ads', 'SA360'):
@@ -134,12 +141,12 @@ def persist_results(data: list[dict[str, str]], project_id, dataset):
   job_config.source_format = bigquery.SourceFormat.NEWLINE_DELIMITED_JSON
   job_config.write_disposition = 'WRITE_TRUNCATE'
   job_config.schema = [
-      bigquery.SchemaField('spec_set_name', 'STRING', mode='REQUIRED'),
+      bigquery.SchemaField('name', 'STRING', mode='REQUIRED'),
       bigquery.SchemaField('product', 'STRING', mode='REQUIRED'),
-      bigquery.SchemaField('owner_id', 'STRING', mode='REQUIRED'),
+      bigquery.SchemaField('customer_owner_id', 'STRING', mode='REQUIRED'),
       bigquery.SchemaField('entity_type', 'STRING', mode='REQUIRED'),
       bigquery.SchemaField('entity_id', 'STRING', mode='REQUIRED'),
-      bigquery.SchemaField('entity_name', 'STRING', mode='REQUIRED'),
+      bigquery.SchemaField('entity_value', 'STRING', mode='REQUIRED'),
       bigquery.SchemaField('validation_message', 'STRING', mode='REQUIRED')
   ]
 
@@ -155,22 +162,23 @@ def persist_results(data: list[dict[str, str]], project_id, dataset):
   if errors:
     print(f'Errors adding rows to table: {errors}')
   else:
-    print(f'Added rows to table.')
+    print(f'Added {len(data)} row{"s" if len(data)!=1 else ""} to table.')
 
 
 def set_google_cloud_project_env_var(id):
   os.environ['GOOGLE_CLOUD_PROJECT'] = id
 
 
-def validate_names(data: RequestJson) -> _ValidateNamesResponseJson:
+def validate_entity_values(data: RequestJson) -> _ValidateNamesResponseJson:
   validator: RawJsonValidatorSource = RawJsonValidatorSource(
-      project_id=data['taxonomy_cloud_project_id'],
-      bigquery_dataset=data['taxonomy_bigquery_dataset'])
+      cloud_project=data['taxonomy_cloud_project_id'],
+      bigquery_dataset=data['taxonomy_bigquery_dataset'],
+      bq_client=bq_client(),
+      spec_name=data['spec_name'],
+      values_to_validate=data['entity_values_to_validate'],
+      base_row_data={})
 
-  values = validator.fetch_values_to_validate(data)
-  names = validator.extract_names(values)
-  validated_data = validator.validate_values(data['spec_name'], names)
-  results = validator.merge_input_and_output(values, validated_data)
+  results = validator.validate()
 
   return {'results': results}
 
@@ -181,13 +189,9 @@ def get_json_data(request):
 
 
 def bq_client() -> bigquery.Client:
+  global _bq_client
   if not _bq_client:
-    credentials, project = auth.default(scopes=[
-        'https://www.googleapis.com/auth/drive',
-        'https://www.googleapis.com/auth/bigquery',
-        'https://www.googleapis.com/auth/cloud-platform',
-        'https://www.googleapis.com/auth/spreadsheets',
-    ])
+    credentials, project = auth.default(scopes=_BQ_CLIENT_SCOPES)
     _bq_client = bigquery.Client(credentials=credentials, project=project)
 
   return _bq_client

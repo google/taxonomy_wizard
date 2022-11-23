@@ -23,7 +23,7 @@ API_VERSION = 'v4'
 API_SCOPES = [
     'https://www.googleapis.com/auth/dfareporting',
     'https://www.googleapis.com/auth/dfatrafficking',
-    'https://www.googleapis.com/auth/ddmconversions'
+    'https://www.googleapis.com/auth/ddmconversions',
 ]
 
 
@@ -32,12 +32,12 @@ class CampaignManagerValidatorSource(ValidatorProductSource):
 
   def fetch_data_to_validate(self):
     """ Fetches the data to validate based on the object properties."""
-    entity_level, entity_name = self._choose_entity_level()
+    entity_level, entity_value = self._choose_entity_level()
 
     request: http.HttpRequest = entity_level.list(
         profileId=self.filter.customer_owner_id,
         advertiserIds=self.filter.advertiser_ids,
-        fields='id, name, start_date, end_date', <-----ERROR HERE
+        fields='campaigns(id, name, startDate, endDate)',
         archived=False,
         sortField='NAME')
 
@@ -45,11 +45,11 @@ class CampaignManagerValidatorSource(ValidatorProductSource):
     while True:
       response = request.execute()
 
-      for row in response[entity_name]:
+      for row in response[entity_value]:
         if filtered_row := self._filter_row(row):
           output.append(filtered_row)
 
-      if response[entity_name] and response['nextPageToken']:
+      if entity_value in response and 'nextPageToken' in response:
         request = entity_level.list_next(request, response)
       else:
         break
@@ -57,34 +57,33 @@ class CampaignManagerValidatorSource(ValidatorProductSource):
     return output
 
   def _filter_row(self, row):
-    if self.filter.min_start_date and row[
-        'start_date'] < self.filter.min_start_date:
+    if (self.filter.min_start_date and
+        row['startDate'] < self.filter.min_start_date):
       return
-    if self.filter.max_start_date and row[
-        'start_date'] > self.filter.min_start_date:
+    if (self.filter.max_start_date and
+        row['startDate'] > self.filter.max_start_date):
       return
-    if self.filter.min_end_date and row['end_date'] < self.filter.min_end_date:
+    if self.filter.min_end_date and row['endDate'] < self.filter.min_end_date:
       return
-    if self.filter.max_end_date and row['end_date'] > self.filter.min_end_date:
+    if self.filter.max_end_date and row['endDate'] > self.filter.max_end_date:
       return
-    data = {
+    return {
         'entity_id': row['id'],
-        'entity_name': row['name'],
+        'entity_value': row['name'],
     }
 
   def _choose_entity_level(self):
     service: discovery.Resource = self._build_service()
-    if self.taxonomy_level == 'Campaign':
+    if self.entity_type == 'Campaign':
       entity_level = service.campaigns()
-      entity_name = 'campaign'
+      entity_value = 'campaigns'
     else:
       raise ValueError(
-          f'Unsupported value for "taxonomy_level": "{self.taxonomy_level}".')
-    return entity_level, entity_name
+          f'Unsupported value for "entity_type" (aka "Taxonomy level"): "{self.entity_type}".'
+      )
+    return entity_level, entity_value
 
   def _build_service(self) -> discovery.Resource:
     credentials, _ = auth.default(scopes=API_SCOPES)
-    # http = credentials.authorize(http=httplib2.Http())
-    # service = discovery.build(API_NAME, API_VERSION, http=http)
     service = discovery.build(API_NAME, API_VERSION, credentials=credentials)
     return service

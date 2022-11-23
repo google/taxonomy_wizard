@@ -78,10 +78,8 @@ def create_objects(request_json: RequestJson):
   dims_for_specs: dict[str, OrderedDict[str, Dimension]] =\
       create_taxonomy_dimensions(dimensions_json, fields)
 
-  spec_set = create_taxonomy_spec_set(specs_json, dims_for_specs, fields,
-                                      cloud_project_id, bigquery_dataset)
-
-  return spec_set
+  return create_taxonomy_spec_set(specs_json, dims_for_specs, fields,
+                                  cloud_project_id, bigquery_dataset)
 
 
 def get_json_objects(data):
@@ -204,10 +202,7 @@ def create_taxonomy_spec_set(specs_json: Any,
                                                                    Dimension]],
                              fields: dict[str, Field], cloud_project_id: str,
                              bigquery_dataset: str):
-  spec_set: SpecificationSet = SpecificationSet(
-      fields=fields,
-      cloud_project_id=cloud_project_id,
-      bigquery_dataset=bigquery_dataset)
+  specs: dict[str, Specification] = dict()
 
   for json in specs_json:
     if json['name'] in dims_for_specs:
@@ -217,18 +212,35 @@ def create_taxonomy_spec_set(specs_json: Any,
           field_structure_type_val=json['field_structure_type'],
           product=json['product'],
           customer_owner_id=json['customer_owner_id'],
-          taxonomy_level=json['taxonomy_level'],
+          entity_type=json['entity_type'],
           advertiser_ids=json['advertiser_ids'],
           campaign_ids=json['campaign_ids'],
-          start_date=json['start_date'],
-          end_date=json['end_date'],
+          min_start_date=json['min_start_date'],
+          max_start_date=json['max_start_date'],
+          min_end_date=json['min_end_date'],
+          max_end_date=json['max_end_date'],
           dimensions=dimensions)
-      spec_set.specs[spec.name] = spec
+      specs[spec.name] = spec
 
-  return spec_set
+  return SpecificationSet(
+      cloud_project_id=cloud_project_id,
+      bigquery_dataset=bigquery_dataset,
+      bq_client=bq_client(),
+      specs=specs,
+      fields=fields,
+  )
 
 
+# TODO(blevitan): Per @robertmcmahan: Another approach to this might be to
+# create a class with a static method that returns a BigQuery Client. Would be
+# nice as well because you could set the default scopes as a constant in that
+# class making it a bit more clear that's what those are. Would allow you to
+# provide scopes as an optional parameter for that static method to override the
+# defaults in the future. This could be called at the top of the file and its
+# return value could be set to the global variable. Then that global could be
+#  passed as a dependency to any method or class that needs it.
 def bq_client() -> bigquery.Client:
+  global _bq_client
   if not _bq_client:
     credentials, project = auth.default(scopes=[
         'https://www.googleapis.com/auth/drive',

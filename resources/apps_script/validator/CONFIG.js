@@ -20,7 +20,6 @@
  *  limitations under the License.
  */
 
-//TODO(blevitan): make it easier to update this. 
 const CLOUD_FUNCTION_URI = 'https://validator-zuvicuro4q-uc.a.run.app';
 const TAXONOMY_CLOUD_PROJECT_ID = 'taxonomy-wizard-dev';
 const TAXONOMY_CLOUD_DATASET = 'taxonomy_wizard';

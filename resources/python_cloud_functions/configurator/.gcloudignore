@@ -4,3 +4,6 @@ __pycache__
 venv*
 configurator.code-workspace
 *test.py
+deploy.sh
+TEMP*
+testing

@@ -29,31 +29,52 @@ gcloud projects add-iam-policy-binding ${PROJECT_ID} \
     --member="serviceAccount:taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com" \
     --role="roles/bigquery.jobUser"
 
-gcloud services enable run.googleapis.com
 gcloud services enable artifactregistry.googleapis.com
+gcloud services enable bigquery.googleapis.com
 gcloud services enable cloudbuild.googleapis.com
 gcloud services enable cloudfunctions.googleapis.com
-gcloud services enable iam.googleapis.com
-gcloud services enable bigquery.googleapis.com
+gcloud services enable cloudscheduler.googleapis.com
 gcloud services enable drive.googleapis.com
-
+gcloud services enable dfareporting.googleapis.com
+gcloud services enable iam.googleapis.com
+gcloud services enable run.googleapis.com
 
 gcloud functions deploy validator \
---gen2 \
---region=us-central1 \
---runtime=python310 \
---source=. \
---entry-point=handle_request \
---service-account=taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com \
---trigger-http \
---no-allow-unauthenticated \
---ignore-file=.gcloudignore
+  --gen2 \
+  --region=us-central1 \
+  --runtime=python310 \
+  --source=. \
+  --entry-point=handle_request \
+  --service-account=taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com \
+  --trigger-http \
+  --no-allow-unauthenticated \
+  --ignore-file=.gcloudignore
 
-echo "Make sure you move the Validtor Plugin's Apps Script to the same project you deployed to."
+
+## TODO(blevitan): Move this to the apps_script/validator directory
+# PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
+URI=$(gcloud functions describe validator --gen2 --format="value(serviceConfig.uri)" --region=us-central1)
+ESCAPED_URI=$(sed 's/[&/\]/\\&/g' <<<"$URI")
+sed -i \
+  -e "s/const CLOUD_FUNCTION_URI = .*/const CLOUD_FUNCTION_URI = '${ESCAPED_URI}';/g" \
+  -e "s/const TAXONOMY_CLOUD_PROJECT_ID = .*/const TAXONOMY_CLOUD_PROJECT_ID = '${PROJECT_ID}';/g" \
+  ../../apps_script/validator/CONFIG.js
+
+gcloud scheduler jobs create http validator-scheduler \
+--schedule="5 4 * * *" \
+--uri="${URI}" \
+--location=us-central1 \
+--http-method=GET
+
+echo "█████████████████████████████████████████████████████████████████████████"
+echo "██                                                                     ██"
+echo "██                      DEPLOYMENT SCRIPT COMPLETE                     ██"
+echo "██                                                                     ██"
+echo "█████████████████████████████████████████████████████████████████████████"
+echo "Make sure you move the Validator Plugin's Apps Script to the same project you deployed to."
 echo "You may need to configure the OAuth Consent screen when doing this:"
 echo "  User Type: Internal."
 echo "  Enter App name (e.g., 'Taxonomy Wizard')."
 echo "  Add 'google.com' as an 'Authorized Domain'."
 echo "  Enter Support and Contact email address (e.g., your email address)."
 echo ""
-echo "After you have done the above, please rerun this script."

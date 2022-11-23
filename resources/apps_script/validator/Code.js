@@ -185,9 +185,6 @@ function submitRequest(url,
   let encodedQueryParams;
   if (queryParameters)
     encodedQueryParams = '?key=' + getClientId() + new URLSearchParams(queryParameters).toString();
-    // encodedQueryParams = Object.keys(queryParameters).reduce(function (prev, key) {
-    //   return prev + "&" + encodeURIComponent(key) + "=" + encodeURIComponent(queryParameters[key]);
-    // }, "?key=" + getClientId());
   else
     encodedQueryParams = '';
 

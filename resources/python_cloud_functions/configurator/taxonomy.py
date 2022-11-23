@@ -20,16 +20,11 @@
 #       ∟ TaxonomyDimension
 
 import datetime
-import json
-import os
-from random import random
-from time import sleep
 from jinja_renderer import JinjaRenderer
 import enum
 import re
 from typing import OrderedDict
 from attrs import define, field
-from google import auth
 from google.cloud import bigquery  # type: ignore
 from google.cloud.exceptions import NotFound
 
@@ -43,7 +38,7 @@ class FieldStructureType(enum.Enum):
   # FIXED_LENGTH = 3
 
 
-class TaxonomyLevel(enum.Enum):
+class EntityType(enum.Enum):
   # ADVERTISER = 1
   CAMPAIGN = 1  # TODO(blevitan): change to 2 when uncommenting others
   # INSERTION_ORDER = 3
@@ -116,7 +111,7 @@ class Specification:
   field_structure_type_val: str = field()
   product: str = field(default=None)
   customer_owner_id: str = field(default=None)
-  taxonomy_level: TaxonomyLevel = field(default=None)
+  entity_type: EntityType = field(default=None)
   _advertiser_ids: str = field(default=None)
   _campaign_ids: str = field(default=None)
   min_start_date: datetime.date = field(default=None)
@@ -210,7 +205,7 @@ class SpecificationSet:
                              mode='REQUIRED'),
         bigquery.SchemaField('product', 'STRING', mode='NULLABLE'),
         bigquery.SchemaField('customer_owner_id', 'STRING', mode='NULLABLE'),
-        bigquery.SchemaField('taxonomy_level', 'STRING', mode='NULLABLE'),
+        bigquery.SchemaField('entity_type', 'STRING', mode='NULLABLE'),
         bigquery.SchemaField('advertiser_ids', 'INT64', mode='REPEATED'),
         bigquery.SchemaField('campaign_ids', 'INT64', mode='REPEATED'),
         bigquery.SchemaField('min_start_date', 'STRING', mode='NULLABLE'),
@@ -225,13 +220,13 @@ class SpecificationSet:
         'validation_query_template': spec.validation_query_template,
         'product': spec.product,
         'customer_owner_id': spec.customer_owner_id,
-        'taxonomy_level': spec.taxonomy_level,
+        'entity_type': spec.entity_type,
         'advertiser_ids': spec.advertiser_ids,
         'campaign_ids': spec.campaign_ids,
-        'min_start_date': spec.start_date,
-        'max_start_date': spec.start_date,
-        'min_end_date': spec.end_date,
-        'max_end_date': spec.end_date,
+        'min_start_date': spec.min_start_date,
+        'max_start_date': spec.max_start_date,
+        'min_end_date': spec.min_end_date,
+        'max_end_date': spec.max_end_date,
     } for spec in self.specs.values()]
 
     job = self.bq_client.load_table_from_json(data,

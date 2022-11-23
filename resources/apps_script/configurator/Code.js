@@ -25,6 +25,12 @@ const HTTP_STATUS_MAX_ERROR_VALUE_ = 599;
 const NUM_RETRIES = 3;
 
 const _CLOUD_FUNCTION_ENDPOINT_RANGE_NAME ='CloudFunctionEndpoint';
+const _CLOUD_PROJECT_RANGE_NAME ='TaxonomyCloudProjectId';
+const _BQ_DATASET_RANGE_NAME ='TaxonomyBigQueryDataset';
+const _CLOUD_FUNCTION_API_ENDPOINT ='https://cloudfunctions.googleapis.com/v2/';
+const _CONFIGURATOR_FUNCTION_NAME ='configurator';
+
+
 
 
 const OBJECTS_TO_GENERATE_ = [{
@@ -36,7 +42,7 @@ const OBJECTS_TO_GENERATE_ = [{
   valueRowOffset: 2,
   filterColumn: 6,
 }, {
-  sheet: 'Taxonomy Sets',
+  sheet: 'Taxonomy Specs',
   entityType: 'TaxonomySpec',
   keyRow: 1,
   keyColumnStart: 1,
@@ -102,10 +108,13 @@ function deleteAllExistingSpecs() {
  * @param {string} action What to do with the data: "append", "overwrite", "delete".
  */
 function generateAllConfigData(action) {
+  const project_id = SpreadsheetApp.getActiveSpreadsheet().getRangeByName(_CLOUD_PROJECT_RANGE_NAME).getValue();
+  const dataset = SpreadsheetApp.getActiveSpreadsheet().getRangeByName(_BQ_DATASET_RANGE_NAME).getValue();
+
   let specSets = {
     'action': action,
-    'taxonomy_cloud_project_id': SpreadsheetApp.getActiveSpreadsheet().getRangeByName('TaxonomyCloudProjectId').getValue(),
-    "taxonomy_bigquery_dataset": SpreadsheetApp.getActiveSpreadsheet().getRangeByName('TaxonomyBigQueryDataset').getValue(),
+    'taxonomy_cloud_project_id': project_id,
+    "taxonomy_bigquery_dataset": dataset,
     'data': [],
   }
 
@@ -113,8 +122,10 @@ function generateAllConfigData(action) {
     specSets.data.push(getSheetConfigDataForRequest(def));
   }
 
-  const endpoint = SpreadsheetApp.getActiveSpreadsheet().getRangeByName(_CLOUD_FUNCTION_ENDPOINT_RANGE_NAME).getValue();
-  const response = submitCloudFunctionRequest(endpoint, null, specSets);
+  const configuratorEndPoint = SpreadsheetApp.getActiveSpreadsheet()
+    .getRangeByName(_CLOUD_FUNCTION_ENDPOINT_RANGE_NAME)
+    .getValue();
+  const response = submitCloudFunctionRequest(configuratorEndPoint, null, specSets);
   if (response.status >= HTTP_STATUS_MIN_ERROR_VALUE_ &&
     response.status <= HTTP_STATUS_MAX_ERROR_VALUE_) {
     return false;
@@ -168,7 +179,7 @@ function getSheetConfigDataForRequest(sheetDefinition) {
   /**
     * Sends a request to the Cloud Function.
     *
-    * @param {!Object} endpoint Cloud function endpoint.
+    * @param {!Object} endPoint Cloud function endpoint.
     * @param {!Object} queryParameters Parameters to pass to url via query (in dictionary form).
     * @param {!Object} payload Payload to send.
     * @param {!Object} options Options to pass to the endpoint.
@@ -177,7 +188,7 @@ function getSheetConfigDataForRequest(sheetDefinition) {
     *
     * @return {!Object} Cloud function response.
     */
-  function submitCloudFunctionRequest(endpoint, queryParameters = null, payload = null, options = null, httpMethod = "GET") {
+  function submitCloudFunctionRequest(endPoint, queryParameters = null, payload = null, options = null, httpMethod = "GET") {
      if (!options) {
       options = {};
     }
@@ -191,19 +202,21 @@ function getSheetConfigDataForRequest(sheetDefinition) {
     }
 
     let encodedQueryParams;
-    if (queryParameters)
+    if (queryParameters) {
       encodedQueryParams = Object.keys(queryParameters).reduce(function(prev, key) {
         return prev + "&" + encodeURIComponent(key) + "=" + encodeURIComponent(queryParameters[key]);
       });
-    else
+    }
+    else {
       encodedQueryParams = "";
-    const url = endpoint + encodedQueryParams;
+    }
+    const url = endPoint + (!endPoint.endsWith('?') ? '?' : '') + encodedQueryParams;
 
     options.method = httpMethod;
     options.headers['Content-Type'] = "application/json";
     options.muteHttpExceptions = FLAGS.SHOW_HTTP_EXCEPTIONS;
 
-    options.headers['Authorization'] = "Bearer " + ScriptApp.getIdentityToken();;
+    options.headers['Authorization'] = "Bearer " + ScriptApp.getIdentityToken();
 
     if (FLAGS.LOG_REQUESTS) {
       console.log("Request URL: " + url);
@@ -241,7 +254,7 @@ function getSheetConfigDataForRequest(sheetDefinition) {
       throw err
     }
 
-    return response.getContentText();
+    return JSON.parse(response.getContentText());
   }
 
 
