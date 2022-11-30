@@ -7,3 +7,4 @@ configurator.code-workspace
 deploy.sh
 TEMP*
 testing
+.gcloudignore

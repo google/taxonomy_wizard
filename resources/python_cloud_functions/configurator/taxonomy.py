@@ -20,6 +20,7 @@
 #       ∟ TaxonomyDimension
 
 import datetime
+import enum
 from jinja_renderer import JinjaRenderer
 import enum
 import re
@@ -33,17 +34,16 @@ _NUM_RETRIES: int = 5
 
 
 class FieldStructureType(enum.Enum):
-  DELIMITED = 1
-  # DELIMITER_AND_DIMENSION_PREFIX = 2
-  # FIXED_LENGTH = 3
+  DELIMITED = enum.auto()
+  FIXED_LENGTH = enum.auto()
 
 
 class EntityType(enum.Enum):
-  # ADVERTISER = 1
-  CAMPAIGN = 1  # TODO(blevitan): change to 2 when uncommenting others
-  # INSERTION_ORDER = 3
-  # LINE_ITEM = 4
-  # PLACEMENT = 5
+  # ADVERTISER = enum.auto()
+  CAMPAIGN = enum.auto()
+  # INSERTION_ORDER = enum.auto()
+  # LINE_ITEM = enum.auto()
+  # PLACEMENT = enum.auto()
 
 
 @define(auto_attribs=True)

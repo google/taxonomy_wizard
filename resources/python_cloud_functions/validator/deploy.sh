@@ -17,9 +17,18 @@
 
 PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
 
+
+# gcloud iam service-accounts create taxonomy-wizard-validation-invoker \
+#     --description="Service account for cloud scheduler to invoke Validator." \
+#     --display-name="Taxonomy Wizard Cloud Scheduler Validation Invoker."
+
 gcloud iam service-accounts create taxonomy-wizard-validator \
     --description="Service account for Taxonomy Wizard Validator component." \
     --display-name="Taxonomy Wizard Validator Service Account"
+
+gcloud projects add-iam-policy-binding ${PROJECT_ID} \
+    --member="serviceAccount:taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com" \
+    --role="roles/cloudfunctions.invoker"
 
 gcloud projects add-iam-policy-binding ${PROJECT_ID} \
     --member="serviceAccount:taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com" \
@@ -60,21 +69,24 @@ sed -i \
   -e "s/const TAXONOMY_CLOUD_PROJECT_ID = .*/const TAXONOMY_CLOUD_PROJECT_ID = '${PROJECT_ID}';/g" \
   ../../apps_script/validator/CONFIG.js
 
-gcloud scheduler jobs create http validator-scheduler \
---schedule="5 4 * * *" \
---uri="${URI}" \
---location=us-central1 \
---http-method=GET
 
-echo "█████████████████████████████████████████████████████████████████████████"
-echo "██                                                                     ██"
-echo "██                      DEPLOYMENT SCRIPT COMPLETE                     ██"
-echo "██                                                                     ██"
-echo "█████████████████████████████████████████████████████████████████████████"
-echo "Make sure you move the Validator Plugin's Apps Script to the same project you deployed to."
-echo "You may need to configure the OAuth Consent screen when doing this:"
-echo "  User Type: Internal."
-echo "  Enter App name (e.g., 'Taxonomy Wizard')."
-echo "  Add 'google.com' as an 'Authorized Domain'."
-echo "  Enter Support and Contact email address (e.g., your email address)."
-echo ""
+gcloud scheduler jobs create http validator-scheduler \
+  --schedule="5 4 * * *" \
+  --uri="${URI}/?action=validate_everything&taxonomy_cloud_project_id=${PROJECT_ID}&taxonomy_bigquery_dataset=taxonomy_wizard" \
+  --location="us-central1" \
+  --http-method="GET" \
+  --oidc-service-account-email="taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com"
+# --uri="${URI}" \
+# --message-body="{\"action\": \"validate_everything\", \"taxonomy_cloud_project_id\": \"${PROJECT_ID}\", \"taxonomy_bigquery_dataset\": \"taxonomy_wizard\" }"\
+
+echo "█████████████████████████████████████████████████████████████████████████
+██                                                                     ██
+██                      DEPLOYMENT SCRIPT COMPLETE                     ██
+██                                                                     ██
+█████████████████████████████████████████████████████████████████████████
+Make sure you move the Validator Plugin's Apps Script to the same project you deployed to.
+You may need to configure the OAuth Consent screen when doing this:
+  User Type: Internal.
+  Enter App name (e.g., 'Taxonomy Wizard').
+  Add 'google.com' as an 'Authorized Domain'.
+  Enter Support and Contact email address (e.g., your email address)."

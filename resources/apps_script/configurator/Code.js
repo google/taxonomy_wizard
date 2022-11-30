@@ -111,21 +111,21 @@ function generateAllConfigData(action) {
   const project_id = SpreadsheetApp.getActiveSpreadsheet().getRangeByName(_CLOUD_PROJECT_RANGE_NAME).getValue();
   const dataset = SpreadsheetApp.getActiveSpreadsheet().getRangeByName(_BQ_DATASET_RANGE_NAME).getValue();
 
-  let specSets = {
+  let params = {
     'action': action,
     'taxonomy_cloud_project_id': project_id,
     "taxonomy_bigquery_dataset": dataset,
-    'data': [],
   }
 
+  let data = [];
   for (const def of OBJECTS_TO_GENERATE_) {
-    specSets.data.push(getSheetConfigDataForRequest(def));
+    data.push(getSheetConfigDataForRequest(def));
   }
 
-  const configuratorEndPoint = SpreadsheetApp.getActiveSpreadsheet()
+  const configuratorEndpoint = SpreadsheetApp.getActiveSpreadsheet()
     .getRangeByName(_CLOUD_FUNCTION_ENDPOINT_RANGE_NAME)
     .getValue();
-  const response = submitCloudFunctionRequest(configuratorEndPoint, null, specSets);
+  const response = submitRequest(configuratorEndpoint, params, data, null, "POST");
   if (response.status >= HTTP_STATUS_MIN_ERROR_VALUE_ &&
     response.status <= HTTP_STATUS_MAX_ERROR_VALUE_) {
     return false;
@@ -176,86 +176,102 @@ function getSheetConfigDataForRequest(sheetDefinition) {
 }
 
 
-  /**
-    * Sends a request to the Cloud Function.
-    *
-    * @param {!Object} endPoint Cloud function endpoint.
-    * @param {!Object} queryParameters Parameters to pass to url via query (in dictionary form).
-    * @param {!Object} payload Payload to send.
-    * @param {!Object} options Options to pass to the endpoint.
-    * @param {!string} httpMethod HTTP method to use for Request.
-    *                  (i.e., PUT, GET, POST, DELETE, or PATCH)
-    *
-    * @return {!Object} Cloud function response.
-    */
-  function submitCloudFunctionRequest(endPoint, queryParameters = null, payload = null, options = null, httpMethod = "GET") {
-     if (!options) {
-      options = {};
-    }
+/**
+  * Sends a request.
+  *
+  * @param {!Object} endpoint Cloud function endpoint.
+  * @param {!Object} queryParameters Parameters to pass to url via query (in dictionary form).
+  * @param {!Object} payload Payload to send.
+  * @param {!Object} options Options to pass to the endpoint.
+  * @param {!string} httpMethod HTTP method to use for Request.
+  *                  (i.e., PUT, GET, POST, DELETE, or PATCH)
+  *
+  * @return {!Object} Cloud function response.
+  */
+function submitRequest(endpoint,
+                      queryParameters = {},
+                      payload = null,
+                      options = null,
+                      httpMethod = "GET") {
+let response;
 
-    if (!options.headers) {
-      options.headers = {};
-    }
-
-    if (payload) {
-      options.payload = JSON.stringify(payload);
-    }
-
-    let encodedQueryParams;
-    if (queryParameters) {
-      encodedQueryParams = Object.keys(queryParameters).reduce(function(prev, key) {
-        return prev + "&" + encodeURIComponent(key) + "=" + encodeURIComponent(queryParameters[key]);
-      });
-    }
-    else {
-      encodedQueryParams = "";
-    }
-    const url = endPoint + (!endPoint.endsWith('?') ? '?' : '') + encodedQueryParams;
-
-    options.method = httpMethod;
-    options.headers['Content-Type'] = "application/json";
-    options.muteHttpExceptions = FLAGS.SHOW_HTTP_EXCEPTIONS;
-
-    options.headers['Authorization'] = "Bearer " + ScriptApp.getIdentityToken();
-
-    if (FLAGS.LOG_REQUESTS) {
-      console.log("Request URL: " + url);
-      console.log("Request Options: " + JSON.stringify(options));
-      console.log("Request Payload:" + UrlFetchApp.getRequest(url, options).payload);
-    }
-
-    if (FLAGS.TEST_MODE) {
-      SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TEST').getRange('$A1').setValue(UrlFetchApp.getRequest(url, options).payload);
-    }
-
-    if (FLAGS.SUBMIT_REQUESTS) {
-      //exponential backoff
-      for (var n=0; n<=NUM_RETRIES; n++) {
-        try {
-            var response = UrlFetchApp.fetch(url, options);
-        } catch(e) {
-          if (n == NUM_RETRIES) {
-            throw e;
-          } 
-          Utilities.sleep((Math.pow(2,n)*1000) + (Math.round(Math.random() * 1000)));
-        }
-      }
-
-    } else { return { 'status': 200, 'content': 'Ok' }; }
-
-    if (FLAGS.LOG_RESPONSES) {
-      console.log("Response code:" + response.getResponseCode());
-      console.log("Response payload: " +UrlFetchApp.getRequest(url, options).payload);
-    }
-
-    if (response.getResponseCode() != 200) {
-      var err = "Error with request. Response Code " + response.getResponseCode() + ": " + response.getContentText();
-      console.error(err);
-      throw err
-    }
-
-    return JSON.parse(response.getContentText());
+  if (!options) {
+    options = {};
   }
+
+  if (!options.headers) {
+    options.headers = {};
+  }
+
+  if (payload) {
+    options.payload = JSON.stringify(payload);
+  }
+
+  const url = endpoint + (!endpoint.endsWith('?') ? '?' : '') + objectToQueryParams(queryParameters);
+
+  options.method = httpMethod;
+  options.headers['Content-Type'] = "application/json";
+  options.muteHttpExceptions = FLAGS.SHOW_HTTP_EXCEPTIONS;
+  options.headers['Authorization'] = "Bearer " + ScriptApp.getIdentityToken();
+
+  if (FLAGS.LOG_REQUESTS) {
+    console.log("Request URL: " + url);
+    console.log("Request Options: " + JSON.stringify(options));
+    console.log("Request Payload:" + UrlFetchApp.getRequest(url, options).payload);
+  }
+
+  if (FLAGS.TEST_MODE) {
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TEST").getRange("A1").setValue(JSON.stringify(payload));
+  }
+
+  if (FLAGS.SUBMIT_REQUESTS) {
+    //exponential backoff
+    for (var n = 0; n < NUM_RETRIES; n++) {
+      try {
+        response = UrlFetchApp.fetch(url, options);
+      } catch (e) {
+        if (n == _NUM_RETRIES) {
+          throw e;
+        }
+        Utilities.sleep((Math.pow(2, n) * 1000) + (Math.round(Math.random() * 1000)));
+      }
+    }
+  } else if (FLAGS.TEST_MODE) {
+    return TEST_RESPONSE;
+  } else {
+    return { 'status': 200, 'content': 'Ok' };
+  }
+
+  if (FLAGS.LOG_RESPONSES) {
+    console.log("Response code:" + response.getResponseCode());
+    console.log("Response payload: " +UrlFetchApp.getRequest(url, options).payload);
+  }
+
+  if (response.getResponseCode() != 200) {
+    var err = "Error with request. Response Code " + response.getResponseCode() + ": " + response.getContentText();
+    console.error(err);
+    throw err
+  }
+
+  return JSON.parse(response.getContentText());
+}
+
+
+/** Encodes and creates string for URL search parameters.
+ * 
+ * (`URLSearchParams()` not supported in Apps script.)
+ * 
+ * @param (!Object) queryParameters object of keys & values for use as parameter string.
+ * 
+ * @return {str} URI encoded search parameters string.
+ */
+function _UrlSearchParams(queryParameters) {
+  return (
+      Object.entries(queryParameters)
+        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+        .join('&')
+    );
+ } 
 
 
 /**

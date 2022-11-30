@@ -51,15 +51,13 @@ gcloud functions deploy configurator \
 --no-allow-unauthenticated \
 --ignore-file=.gcloudignore
 
-  echo "█████████████████████████████████████████████████████████████████████████"
-  echo "██                                                                     ██"
-  echo "██                      DEPLOYMENT SCRIPT COMPLETE                     ██"
-  echo "██                                                                     ██"
-  echo "█████████████████████████████████████████████████████████████████████████"
-echo "Make sure you move the Configurator sheet's Apps Script to the same project you deployed to."
-echo "You may need to configure the OAuth Consent screen when doing this:"
-echo "  User Type: Internal."
-echo "  Enter App name (e.g., 'Taxonomy Wizard')."
-echo "  Enter Support and Contact email address (e.g., your email address)."
-echo ""
-echo "After you have done the above, please rerun this script."
+echo "█████████████████████████████████████████████████████████████████████████
+██                                                                     ██
+██                      DEPLOYMENT SCRIPT COMPLETE                     ██
+██                                                                     ██
+█████████████████████████████████████████████████████████████████████████
+Make sure you move the Configurator sheet's Apps Script to the same project you deployed to.
+You may need to configure the OAuth Consent screen when doing this:
+  User Type: Internal.
+  Enter App name (e.g., 'Taxonomy Wizard').
+  Enter Support and Contact email address (e.g., your email address)."

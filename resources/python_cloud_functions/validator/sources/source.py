@@ -18,9 +18,9 @@ from typing import Mapping, Sequence
 from attrs import define, field
 from google.cloud import bigquery
 
-NamesInput = dict[str, str]
-RequestJson = dict[str, str | list[NamesInput]]
 Primitives = str | int | float | bool
+NamesInput = dict[str, Primitives]
+# RequestJson = dict[str, str | list[NamesInput]]
 
 
 @define(auto_attribs=True)
@@ -180,7 +180,7 @@ class BaseValidatorSource():
 @define(auto_attribs=True)
 class RawJsonValidatorSource(BaseValidatorSource):
   """Validator for when raw values are passed in via  JSON."""
-  _values_to_validate: list[dict[str, any]]
+  _values_to_validate: list[NamesInput]
   # Overriden from Base class
   field_name: str = field(default='value')
   base_row_columns: Sequence[str] = field(default='name')

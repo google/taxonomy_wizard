@@ -15,21 +15,19 @@
 """ Validates names submitted according to specified Taxonomy."""
 
 from collections.abc import Sequence
-from dataclasses import field
 import flask
 import os
 from google.cloud import bigquery
-from google import auth
-from sources.source import RawJsonValidatorSource, ProductSourceFilter, ValidatorProductSource, NamesInput, NamesInput, RequestJson
+from sources.source import RawJsonValidatorSource, ProductSourceFilter, ValidatorProductSource, NamesInput, NamesInput
 from sources.campaign_manager.campaign_manager_source import CampaignManagerValidatorSource
+import bq_client
 
 _ListSpecsResponseJson = list[dict[str, str]]
 _ValidateNamesResponseJson = dict[str, list[NamesInput]]
 
 VALIDATION_RESULTS_TABLE: str = 'validation_results'
 
-_bq_client: bigquery.Client = False
-_BQ_CLIENT_SCOPES: Sequence[str] = [
+_bq_client: bq_client.BqClient = bq_client.BqClient(default_scopes=[
     'https://www.googleapis.com/auth/drive',
     'https://www.googleapis.com/auth/bigquery',
     'https://www.googleapis.com/auth/cloud-platform',
@@ -37,7 +35,8 @@ _BQ_CLIENT_SCOPES: Sequence[str] = [
     'https://www.googleapis.com/auth/dfareporting',
     'https://www.googleapis.com/auth/dfatrafficking',
     'https://www.googleapis.com/auth/ddmconversions',
-]
+])
+
 
 def handle_request(request: flask.Request):
   """Validation of request and creation of task.
@@ -49,29 +48,33 @@ def handle_request(request: flask.Request):
       Successful start response or error response.
   """
   try:
-    data: RequestJson = get_json_data(request)
+    action: str = request.args.get("action")
+    project_id: str = request.args.get("taxonomy_cloud_project_id")
+    dataset: str = request.args.get("taxonomy_bigquery_dataset")
 
-    if data['action'] == 'list_specs':
-      return list_specs(data)
-    elif data['action'] == 'validate_everything':
-      return validate_all_specs(data)
-    elif data['action'] == 'validate_names':
-      return validate_entity_values(data)
+    if action == 'list_specs':
+      return list_specs(project_id, dataset)
+    elif action == 'validate_everything':
+      return validate_all_specs(project_id, dataset)
+    elif action == 'validate_names':
+      spec_name: str = request.args.get("spec_name")
+      data: list[NamesInput] = request.get_json()
+      return validate_entity_values(spec_name, data, project_id, dataset)
     else:
-      raise ValueError('Invalid value {data["action"]} passed for "action"')
+      raise ValueError(
+          f'Invalid or missing value for parameter "action": {data["action"]}.')
   except Exception as e:
+    print(f"Invocation failed with error: {str(e)}")
     return str(e), 400, None
 
 
-def list_specs(data: RequestJson) -> _ListSpecsResponseJson:
-  query: str = f"SELECT name FROM `{data['taxonomy_cloud_project_id']}.{data['taxonomy_bigquery_dataset']}.specifications`\n"
-  rows = bq_client().query(query).result()
+def list_specs(project_id: str, dataset: str) -> _ListSpecsResponseJson:
+  query: str = f"SELECT name FROM `{project_id}.{dataset}.specifications`\n"
+  rows = _bq_client.get().query(query).result()
   return [{'name': row['name']} for row in rows]
 
 
-def validate_all_specs(data: RequestJson):
-  project_id: str = data['taxonomy_cloud_project_id']
-  dataset: str = data['taxonomy_bigquery_dataset']
+def validate_all_specs(project_id: str, dataset: str):
   specs = get_specifications(project_id, dataset)
 
   validation_results = []
@@ -83,9 +86,11 @@ def validate_all_specs(data: RequestJson):
 
   persist_results(validation_results, project_id, dataset)
 
+  return "Successfully ran validation.", 200, None
+
 
 def get_specifications(project_id: str, dataset: str):
-  client: bigquery.Client = bq_client()
+  client: bigquery.Client = _bq_client.get()
   query = "SELECT\n"\
         "  name,\n"\
         "  product,\n"\
@@ -118,7 +123,7 @@ def choose_validator(spec, cloud_project_id, bigquery_dataset):
     validator: ValidatorProductSource = CampaignManagerValidatorSource(
         cloud_project=cloud_project_id,
         bigquery_dataset=bigquery_dataset,
-        bq_client=bq_client(),
+        bq_client=_bq_client.get(),
         spec_name=spec['name'],
         product=spec['product'],
         entity_type=spec['entity_type'],
@@ -135,7 +140,7 @@ def choose_validator(spec, cloud_project_id, bigquery_dataset):
 
 
 def persist_results(data: list[dict[str, str]], project_id, dataset):
-  client: bigquery.Client = bq_client()
+  client: bigquery.Client = _bq_client.get()
 
   job_config = bigquery.LoadJobConfig()
   job_config.source_format = bigquery.SourceFormat.NEWLINE_DELIMITED_JSON
@@ -169,32 +174,20 @@ def set_google_cloud_project_env_var(id):
   os.environ['GOOGLE_CLOUD_PROJECT'] = id
 
 
-def validate_entity_values(data: RequestJson) -> _ValidateNamesResponseJson:
+def validate_entity_values(spec_name: str, values: list[NamesInput],
+                           project_id: str,
+                           dataset: str) -> _ValidateNamesResponseJson:
   validator: RawJsonValidatorSource = RawJsonValidatorSource(
-      cloud_project=data['taxonomy_cloud_project_id'],
-      bigquery_dataset=data['taxonomy_bigquery_dataset'],
-      bq_client=bq_client(),
-      spec_name=data['spec_name'],
-      values_to_validate=data['entity_values_to_validate'],
+      cloud_project=project_id,
+      bigquery_dataset=dataset,
+      bq_client=_bq_client.get(),
+      spec_name=spec_name,
+      values_to_validate=values,
       base_row_data={})
 
   results = validator.validate()
 
   return {'results': results}
-
-
-def get_json_data(request):
-  data: dict[str, str | list[NamesInput]] = request.get_json()  # type: ignore
-  return data
-
-
-def bq_client() -> bigquery.Client:
-  global _bq_client
-  if not _bq_client:
-    credentials, project = auth.default(scopes=_BQ_CLIENT_SCOPES)
-    _bq_client = bigquery.Client(credentials=credentials, project=project)
-
-  return _bq_client
 
 
 if __name__ == '__main__':

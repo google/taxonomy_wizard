@@ -14,22 +14,25 @@
 #
 # Generates set of Taxonomy Specs based on JSON received from template Sheet.
 
-import json
 import os
 import re
 from collections import defaultdict
 from typing import Any, OrderedDict
-from google import auth
-from google.cloud import bigquery
 import flask
 from taxonomy import Dimension, Field, Specification, SpecificationSet
+import bq_client
 
 # TODO(blevitan): Replace `Any` with more specific type info.
 RequestJson = dict[str, Any]
 
 _SUCCESS_MESSAGE = 'Successfully generated tables.'
 
-_bq_client: bigquery.Client = None
+_bq_client: bq_client.BqClient = bq_client.BqClient(default_scopes=[
+    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/bigquery',
+    'https://www.googleapis.com/auth/cloud-platform',
+    'https://www.googleapis.com/auth/spreadsheets',
+])
 
 
 def handle_request(request: flask.Request):
@@ -41,45 +44,37 @@ def handle_request(request: flask.Request):
   Returns:
       Successful start response or error response.
   """
-  # access_token = request.headers.get('Authorization')
-  # if not authorized(access_token):
-  #   logging.info(f'HTTP 403: Forbidden')
-  #   return 'Forbidden.', 403, None
-
-  request_json: RequestJson = request.get_json()
-
-  # TODO(blevitan): Figure out why both these need to be set.
-  os.environ['GOOGLE_CLOUD_PROJECT'] = request_json['taxonomy_cloud_project_id']
-  os.environ['GCP_PROJECT'] = os.environ['GOOGLE_CLOUD_PROJECT']
-
   try:
-    spec_set = create_objects(request_json)
-    response = push_to_database(request_json['action'], spec_set)
+    action: str = request.args.get("action")
+    project_id: str = request.args.get("taxonomy_cloud_project_id")
+    dataset: str = request.args.get("taxonomy_bigquery_dataset")
+    request_body_json: RequestJson = request.get_json()
+
+    # TODO(blevitan): Figure out why both these need to be set.
+    os.environ['GOOGLE_CLOUD_PROJECT'] = project_id
+    os.environ['GCP_PROJECT'] = project_id
+
+    spec_set = create_objects(request_body_json, project_id, dataset)
+    response = push_to_database(action, spec_set)
   except Exception as e:
     return str(e), 400, None
   return response
 
 
-def create_objects(request_json: RequestJson):
-  print("Entered Configurator. GCP_PROJECT via env=" +
-        os.environ.get('GCP_PROJECT', '"GCP_PROJECT" variable is not set.'))
-  print("Creating objects from request...")
-  print(json.dumps(request_json))
+def create_objects(data: RequestJson, project_id: str, dataset: str):
   """Generates Tables from JSON request data."""
-  data = request_json['data']
-  cloud_project_id = request_json['taxonomy_cloud_project_id']
-  bigquery_dataset = request_json['taxonomy_bigquery_dataset']
+  print("Creating objects from request...")
+  print(data)
 
   fields_json, specs_json, dimensions_json = get_json_objects(data)
 
-  fields = create_taxonomy_fields(fields_json, cloud_project_id,
-                                  bigquery_dataset)
+  fields = create_taxonomy_fields(fields_json, project_id, dataset)
 
   dims_for_specs: dict[str, OrderedDict[str, Dimension]] =\
       create_taxonomy_dimensions(dimensions_json, fields)
 
   return create_taxonomy_spec_set(specs_json, dims_for_specs, fields,
-                                  cloud_project_id, bigquery_dataset)
+                                  project_id, dataset)
 
 
 def get_json_objects(data):
@@ -122,7 +117,7 @@ def create_taxonomy_fields(fields_json, cloud_project_id, bigquery_dataset)\
                   dictionary_range=json['dictionary_range'],
                   cloud_project_id=cloud_project_id,
                   bigquery_dataset=bigquery_dataset,
-                  bq_client=bq_client())
+                  bq_client=_bq_client.get())
     fields[json['name']] = field
 
   return fields
@@ -225,32 +220,10 @@ def create_taxonomy_spec_set(specs_json: Any,
   return SpecificationSet(
       cloud_project_id=cloud_project_id,
       bigquery_dataset=bigquery_dataset,
-      bq_client=bq_client(),
+      bq_client=_bq_client.get(),
       specs=specs,
       fields=fields,
   )
-
-
-# TODO(blevitan): Per @robertmcmahan: Another approach to this might be to
-# create a class with a static method that returns a BigQuery Client. Would be
-# nice as well because you could set the default scopes as a constant in that
-# class making it a bit more clear that's what those are. Would allow you to
-# provide scopes as an optional parameter for that static method to override the
-# defaults in the future. This could be called at the top of the file and its
-# return value could be set to the global variable. Then that global could be
-#  passed as a dependency to any method or class that needs it.
-def bq_client() -> bigquery.Client:
-  global _bq_client
-  if not _bq_client:
-    credentials, project = auth.default(scopes=[
-        'https://www.googleapis.com/auth/drive',
-        'https://www.googleapis.com/auth/bigquery',
-        'https://www.googleapis.com/auth/cloud-platform',
-        'https://www.googleapis.com/auth/spreadsheets',
-    ])
-    _bq_client = bigquery.Client(credentials=credentials, project=project)
-
-  return _bq_client
 
 
 if __name__ == '__main__':

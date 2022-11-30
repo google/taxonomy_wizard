@@ -13,6 +13,8 @@
  *  limitations under the License.
  */
 
+const TEST_RESPONSE = {};
+
 function test_create_spec_set() {
   FLAGS.TEST_MODE = true;
 
@@ -64,7 +66,7 @@ function test_create_spec_set() {
     }
 
   const endpoint = SpreadsheetApp.getActiveSpreadsheet().getRangeByName(_CLOUD_FUNCTION_ENDPOINT_RANGE_NAME).getValue();
-  const response = submitCloudFunctionRequest(endpoint, null, specSets);
+  const response = submitRequest(endpoint, null, specSets);
   if (response.status >= HTTP_STATUS_MIN_ERROR_VALUE_ &&
     response.status <= HTTP_STATUS_MAX_ERROR_VALUE_) {
     return false;

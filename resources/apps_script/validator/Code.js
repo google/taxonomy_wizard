@@ -22,7 +22,7 @@
 
 const _LIST_ACTION = 'list_specs';
 const _VALIDATION_ACTION = 'validate_names';
-const _NUM_RETRIES = 3;
+const NUM_RETRIES = 3;
 
 function onOpen(e) {
   SpreadsheetApp.getUi()
@@ -35,13 +35,13 @@ function onOpen(e) {
 
 /** Shows sidebar with Spec sets to choose and Validator button. */
 function showSidebar() {
-  const payload = {
+  const parameters = {
     'action': _LIST_ACTION,
     'taxonomy_cloud_project_id': TAXONOMY_CLOUD_PROJECT_ID,
     'taxonomy_bigquery_dataset': TAXONOMY_CLOUD_DATASET,
   };
 
-  const specs = submitRequest(CLOUD_FUNCTION_URI, null, payload);
+  const specs = submitRequest(CLOUD_FUNCTION_URI, parameters);
   // const specs = [{ 'name': 'US Advertisers Display 2022' }, { 'name': 'US Advertisers 2021' }, { 'name': 'US Advertisers' }];
   const widget = createSidebarHtml(specs)
   SpreadsheetApp.getUi().showSidebar(widget);
@@ -78,15 +78,14 @@ function validateNamesInCells(specName) {
   const values = range.getValues();
 
   const flattenedArray = flatten2dArray(values);
-  const payload = {
+  const parameters = {
     'action': _VALIDATION_ACTION,
-    'entity_values_to_validate': flattenedArray,
     'spec_name': specName,
     'taxonomy_cloud_project_id': TAXONOMY_CLOUD_PROJECT_ID,
     'taxonomy_bigquery_dataset': TAXONOMY_CLOUD_DATASET
   };
 
-  const flat_results = submitRequest(CLOUD_FUNCTION_URI, null, payload).results;
+  const flat_results = submitRequest(CLOUD_FUNCTION_URI, parameters, flattenedArray, null, "POST").results;
   const matrixed_results = unflatten2dArray(flat_results);
   range.setNotes(matrixed_results);
 
@@ -152,9 +151,9 @@ function unflatten2dArray(values) {
 
 
 /**
-  * Sends a request to the Cloud Function.
+  * Sends a request.
   *
-  * @param {!Object} url URL of endpoint being called.
+  * @param {!Object} endpoint Cloud function endpoint.
   * @param {!Object} queryParameters Parameters to pass to url via query (in dictionary form).
   * @param {!Object} payload Payload to send.
   * @param {!Object} options Options to pass to the endpoint.
@@ -163,12 +162,12 @@ function unflatten2dArray(values) {
   *
   * @return {!Object} Cloud function response.
   */
-function submitRequest(url,
-                       queryParameters = null,
-                       payload = null,
-                       options = null,
-                       httpMethod = "GET") {
-  let response;
+function submitRequest(endpoint,
+                      queryParameters = {},
+                      payload = null,
+                      options = null,
+                      httpMethod = "GET") {
+let response;
 
   if (!options) {
     options = {};
@@ -182,12 +181,7 @@ function submitRequest(url,
     options.payload = JSON.stringify(payload);
   }
 
-  let encodedQueryParams;
-  if (queryParameters)
-    encodedQueryParams = '?key=' + getClientId() + new URLSearchParams(queryParameters).toString();
-  else
-    encodedQueryParams = '';
-
+  const url = endpoint + (!endpoint.endsWith('?') ? '?' : '') + objectToQueryParams(queryParameters);
 
   options.method = httpMethod;
   options.headers['Content-Type'] = "application/json";
@@ -205,8 +199,8 @@ function submitRequest(url,
   }
 
   if (FLAGS.SUBMIT_REQUESTS) {
-    //exponential backoff (3 tries)
-    for (var n = 0; n < _NUM_RETRIES; n++) {
+    //exponential backoff
+    for (var n = 0; n < NUM_RETRIES; n++) {
       try {
         response = UrlFetchApp.fetch(url, options);
       } catch (e) {
@@ -216,14 +210,15 @@ function submitRequest(url,
         Utilities.sleep((Math.pow(2, n) * 1000) + (Math.round(Math.random() * 1000)));
       }
     }
-
+  } else if (FLAGS.TEST_MODE) {
+    return TEST_RESPONSE;
+  } else {
+    return { 'status': 200, 'content': 'Ok' };
   }
-  else if (FLAGS.TEST_MODE) { return VALIDATOR_SERVICE_TEST_RESPONSE; }
-  else { return { 'status': 200, 'content': 'Ok' }; }
 
   if (FLAGS.LOG_RESPONSES) {
-    console.log("Request payload: " + UrlFetchApp.getRequest(url, options).payload);
     console.log("Response code:" + response.getResponseCode());
+    console.log("Response payload: " +UrlFetchApp.getRequest(url, options).payload);
   }
 
   if (response.getResponseCode() != 200) {
@@ -231,5 +226,18 @@ function submitRequest(url,
     console.error(err);
     throw err
   }
+
   return JSON.parse(response.getContentText());
+}
+
+
+/**
+ * Because apps Script doesn't support `new URLSearchParams`.
+ */
+function objectToQueryParams(obj) {
+  return (
+    Object.entries(obj)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&')
+  );
 }

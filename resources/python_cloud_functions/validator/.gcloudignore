@@ -7,3 +7,4 @@ venv*
 deploy.sh
 TEMP*
 testing
+.gcloudignore

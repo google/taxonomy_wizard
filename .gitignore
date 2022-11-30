@@ -2,13 +2,17 @@
 pytest.ini
 taxonomy_wizard.code-workspace
 unused_code/
-venv/
+venv-*/
 TEMP*
 resources/python_cloud_functions/configurator/jinja_templates/delimited_validator.old.sql
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
 .vscode
+resources/apps_script/configurator/.clasp.json
+resources/apps_script/validator/.clasp.json
+**/testing/**
+*test.py
 
 # C extensions
 *.so

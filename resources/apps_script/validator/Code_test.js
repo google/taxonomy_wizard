@@ -62,8 +62,8 @@ VALIDATOR_SERVICE_TEST_RESPONSE = {
 
 
 function test_validateNamesInCells() {
-  FLAGS.TEST_MODE = false;
-  FLAGS.SUBMIT_REQUESTS = true;
+  FLAGS.TEST_MODE = true;
+  FLAGS.SUBMIT_REQUESTS = false;
 
   SpreadsheetApp.getActiveSpreadsheet().getSheetByName('Display').setActiveSelection('A4:A10');
   validateNamesInCells("US Advertisers Display 2022");

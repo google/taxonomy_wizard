@@ -20,4 +20,4 @@ FLAGS.SHOW_HTTP_EXCEPTIONS = true;   // Show full HTTP exceptions.
 FLAGS.LOG_REQUESTS = false;          // Log requests (independent of request submission).
 FLAGS.LOG_RESPONSES = false;         // Log responses (when SUBMIT_REQUESTS=true).
 FLAGS.SUBMIT_REQUESTS = true;        // Submit Requests.
-FLAGS.TEST_MODE = true;             // Set to true for test mode.
+FLAGS.TEST_MODE = false;             // Set to true for test mode.
