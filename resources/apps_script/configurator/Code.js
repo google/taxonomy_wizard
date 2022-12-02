@@ -230,7 +230,7 @@ let response;
       try {
         response = UrlFetchApp.fetch(url, options);
       } catch (e) {
-        if (n == _NUM_RETRIES) {
+        if (n == NUM_RETRIES) {
           throw e;
         }
         Utilities.sleep((Math.pow(2, n) * 1000) + (Math.round(Math.random() * 1000)));
@@ -265,13 +265,13 @@ let response;
  * 
  * @return {str} URI encoded search parameters string.
  */
-function _UrlSearchParams(queryParameters) {
+function objectToQueryParams(queryParameters) {
   return (
-      Object.entries(queryParameters)
-        .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
-        .join('&')
-    );
- } 
+    Object.entries(queryParameters)
+      .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
+      .join('&')
+  );
+}
 
 
 /**

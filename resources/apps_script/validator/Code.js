@@ -204,7 +204,7 @@ let response;
       try {
         response = UrlFetchApp.fetch(url, options);
       } catch (e) {
-        if (n == _NUM_RETRIES) {
+        if (n == NUM_RETRIES) {
           throw e;
         }
         Utilities.sleep((Math.pow(2, n) * 1000) + (Math.round(Math.random() * 1000)));
@@ -231,8 +231,13 @@ let response;
 }
 
 
-/**
- * Because apps Script doesn't support `new URLSearchParams`.
+/** Encodes and creates string for URL search parameters.
+ * 
+ * (`URLSearchParams()` not supported in Apps script.)
+ * 
+ * @param (!Object) queryParameters object of keys & values for use as parameter string.
+ * 
+ * @return {str} URI encoded search parameters string.
  */
 function objectToQueryParams(obj) {
   return (

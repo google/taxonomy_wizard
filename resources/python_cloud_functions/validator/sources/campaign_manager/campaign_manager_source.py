@@ -13,8 +13,10 @@
 # limitations under the License.
 """ Campaign Manager validator source. """
 
+from datetime import datetime
+from typing import Any, Mapping, Sequence
 from attrs import define
-from sources.source import ValidatorProductSource
+from sources.source import ValidatorProductSource, NamesInput
 from googleapiclient import discovery, http
 from google import auth
 
@@ -25,63 +27,115 @@ API_SCOPES = [
     'https://www.googleapis.com/auth/dfatrafficking',
     'https://www.googleapis.com/auth/ddmconversions',
 ]
-
+_BQ_DATE_FORMAT = '%Y-%m-%d'
 
 @define(auto_attribs=True)
 class CampaignManagerValidatorSource(ValidatorProductSource):
 
-  def fetch_data_to_validate(self):
+  def fetch_data_to_validate(self) -> Sequence[str]:
     """ Fetches the data to validate based on the object properties."""
-    entity_level, entity_value = self._choose_entity_level()
+    if self.entity_type == 'Campaign':
+      return self._fetch_entity_values(
+          root="campaigns",
+          fields="id, name, startDate, endDate",
+          request_params={
+              'advertiserIds': self.filter.advertiser_ids,
+              'archived': False
+          },
+          filter_function=self._filter_campaign_row)
+    elif self.entity_type == 'Placement':
+      return self._fetch_entity_values(
+          root="placements",
+          fields="id, name",
+          request_params={
+              'advertiserIds': self.filter.advertiser_ids,
+              'campaignIds': self.filter.campaign_ids,
+              'minStartDate': self.filter.min_start_date,
+              'maxStartDate': self.filter.max_start_date,
+              'minEndDate': self.filter.min_end_date,
+              'maxEndDate': self.filter.max_end_date,
+          },
+          filter_function=self._filter_placement_row)
+    else:
+      raise ValueError(
+          f'Unsupported value for "entity_type" (aka "Taxonomy level"): "{self.entity_type}".'
+      )
 
-    request: http.HttpRequest = entity_level.list(
+  def _fetch_entity_values(self, root: str, fields: str, request_params,
+                           filter_function) -> Sequence[NamesInput]:
+    """Fetches filtered values from the specified entity.
+
+    Args:
+        root (str): Name of entity root.
+        fields (str): Fields to return from the entity root.
+        request_params (_type_): Parameters for the entity `list` request.
+            `profileId`, `fields`, and `sortField` are passed by default based
+            on object member values.
+        filter_function (_type_): Function to filter the entity rows by.
+            Must return an object with the following format:
+                `{entity_id: str, entity_value: str}`
+
+    Returns:
+        Sequence[NamesInput]: An array of filtered values.
+    """
+    entity: discovery.Resource = self.fetch_entity_from_service(root)
+
+    request: http.HttpRequest = entity.list(
         profileId=self.filter.customer_owner_id,
-        advertiserIds=self.filter.advertiser_ids,
-        fields='campaigns(id, name, startDate, endDate)',
-        archived=False,
-        sortField='NAME')
+        fields=f'{root}({fields})',
+        sortField='NAME',
+        **request_params)
 
-    output: list[str] = []
+    return self.filter_paged_request(root, filter_function, entity, request)
+
+  def filter_paged_request(self, root, filter_function, entity, request):
+    output: Sequence[NamesInput] = []
+
     while True:
       response = request.execute()
 
-      for row in response[entity_value]:
-        if filtered_row := self._filter_row(row):
+      for row in response[root]:
+        if filtered_row := filter_function(row):
           output.append(filtered_row)
 
-      if entity_value in response and 'nextPageToken' in response:
-        request = entity_level.list_next(request, response)
+      if root in response and 'nextPageToken' in response:
+        request = entity.list_next(request, response)
       else:
         break
 
     return output
 
-  def _filter_row(self, row):
-    if (self.filter.min_start_date and
-        row['startDate'] < self.filter.min_start_date):
-      return
-    if (self.filter.max_start_date and
-        row['startDate'] > self.filter.max_start_date):
-      return
-    if self.filter.min_end_date and row['endDate'] < self.filter.min_end_date:
-      return
-    if self.filter.max_end_date and row['endDate'] > self.filter.max_end_date:
-      return
+  def _filter_campaign_row(self, row):
+    if (self.filter.min_start_date and self._from_bigquery_date(
+        row['startDate']) < self.filter.min_start_date):
+      return None
+    if (self.filter.max_start_date and self._from_bigquery_date(
+        row['startDate']) > self.filter.max_start_date):
+      return None
+    if self.filter.min_end_date and self._from_bigquery_date(
+        row['endDate']) < self.filter.min_end_date:
+      return None
+    if self.filter.max_end_date and self._from_bigquery_date(
+        row['endDate']) > self.filter.max_end_date:
+      return None
     return {
         'entity_id': row['id'],
         'entity_value': row['name'],
     }
 
-  def _choose_entity_level(self):
+  def _from_bigquery_date(self, date_value: str) -> datetime.date:
+    return datetime.strptime(date_value,
+                             _BQ_DATE_FORMAT).date() if date_value else None
+
+  def _filter_placement_row(self, row):
+    return {
+        'entity_id': row['id'],
+        'entity_value': row['name'],
+    }
+
+  def fetch_entity_from_service(self, root_name: str) -> discovery.Resource:
     service: discovery.Resource = self._build_service()
-    if self.entity_type == 'Campaign':
-      entity_level = service.campaigns()
-      entity_value = 'campaigns'
-    else:
-      raise ValueError(
-          f'Unsupported value for "entity_type" (aka "Taxonomy level"): "{self.entity_type}".'
-      )
-    return entity_level, entity_value
+    return getattr(service, root_name)()
 
   def _build_service(self) -> discovery.Resource:
     credentials, _ = auth.default(scopes=API_SCOPES)

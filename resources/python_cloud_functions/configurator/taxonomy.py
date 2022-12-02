@@ -30,8 +30,7 @@ from google.cloud import bigquery  # type: ignore
 from google.cloud.exceptions import NotFound
 
 _DELIMITED_VALIDATOR_FILENAME: str = 'delimited_validator.sql'
-_NUM_RETRIES: int = 5
-
+_BIGQUERY_DATE_FORMAT: str = '%Y-%m-%d'
 
 class FieldStructureType(enum.Enum):
   DELIMITED = enum.auto()
@@ -43,7 +42,7 @@ class EntityType(enum.Enum):
   CAMPAIGN = enum.auto()
   # INSERTION_ORDER = enum.auto()
   # LINE_ITEM = enum.auto()
-  # PLACEMENT = enum.auto()
+  PLACEMENT = enum.auto()
 
 
 @define(auto_attribs=True)
@@ -208,10 +207,10 @@ class SpecificationSet:
         bigquery.SchemaField('entity_type', 'STRING', mode='NULLABLE'),
         bigquery.SchemaField('advertiser_ids', 'INT64', mode='REPEATED'),
         bigquery.SchemaField('campaign_ids', 'INT64', mode='REPEATED'),
-        bigquery.SchemaField('min_start_date', 'STRING', mode='NULLABLE'),
-        bigquery.SchemaField('max_start_date', 'STRING', mode='NULLABLE'),
-        bigquery.SchemaField('min_end_date', 'STRING', mode='NULLABLE'),
-        bigquery.SchemaField('max_end_date', 'STRING', mode='NULLABLE'),
+        bigquery.SchemaField('min_start_date', 'DATE', mode='NULLABLE'),
+        bigquery.SchemaField('max_start_date', 'DATE', mode='NULLABLE'),
+        bigquery.SchemaField('min_end_date', 'DATE', mode='NULLABLE'),
+        bigquery.SchemaField('max_end_date', 'DATE', mode='NULLABLE'),
     ]
 
     data: list[dict[str, str]] = [{
@@ -223,10 +222,10 @@ class SpecificationSet:
         'entity_type': spec.entity_type,
         'advertiser_ids': spec.advertiser_ids,
         'campaign_ids': spec.campaign_ids,
-        'min_start_date': spec.min_start_date,
-        'max_start_date': spec.max_start_date,
-        'min_end_date': spec.min_end_date,
-        'max_end_date': spec.max_end_date,
+        'min_start_date': self._to_bigquery_date(spec.min_start_date),
+        'max_start_date': self._to_bigquery_date(spec.max_start_date),
+        'min_end_date': self._to_bigquery_date(spec.min_end_date),
+        'max_end_date': self._to_bigquery_date(spec.max_end_date),
     } for spec in self.specs.values()]
 
     job = self.bq_client.load_table_from_json(data,
@@ -239,3 +238,6 @@ class SpecificationSet:
       print(f'Errors adding rows to table: {errors}')
     else:
       print(f'Added rows to table.')
+
+  def _to_bigquery_date(self, date_value) -> datetime.date:
+    return date_value.strftime(_BIGQUERY_DATE_FORMAT) if date_value else None

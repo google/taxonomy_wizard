@@ -13,6 +13,7 @@
 # limitations under the License.
 """Classes for validation sources. """
 
+from datetime import datetime
 from abc import abstractmethod
 from typing import Mapping, Sequence
 from attrs import define, field
@@ -20,7 +21,6 @@ from google.cloud import bigquery
 
 Primitives = str | int | float | bool
 NamesInput = dict[str, Primitives]
-# RequestJson = dict[str, str | list[NamesInput]]
 
 
 @define(auto_attribs=True)
@@ -70,7 +70,7 @@ class BaseValidatorSource():
     return results
 
   @abstractmethod
-  def fetch_data_to_validate():
+  def fetch_data_to_validate() -> Sequence[NamesInput]:
     pass
 
   def _extract_unique_values(self,
@@ -196,12 +196,12 @@ class RawJsonValidatorSource(BaseValidatorSource):
 class ProductSourceFilter():
   """Specifications filters for when retrieving from a product-based source."""
   customer_owner_id: str = field()
-  advertiser_ids: list = field()
-  campaign_ids: list = field()
-  min_start_date: str = field()
-  max_start_date: str = field()
-  min_end_date: str = field()
-  max_end_date: str = field()
+  advertiser_ids: Sequence[str | int] = field()
+  campaign_ids: Sequence[str | int] = field()
+  min_start_date: datetime = field()
+  max_start_date: datetime = field()
+  min_end_date: datetime = field()
+  max_end_date: datetime = field()
 
 
 @define(auto_attribs=True)

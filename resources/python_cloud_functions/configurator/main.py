@@ -17,6 +17,7 @@
 import os
 import re
 from collections import defaultdict
+from datetime import datetime
 from typing import Any, OrderedDict
 import flask
 from taxonomy import Dimension, Field, Specification, SpecificationSet
@@ -26,6 +27,7 @@ import bq_client
 RequestJson = dict[str, Any]
 
 _SUCCESS_MESSAGE = 'Successfully generated tables.'
+_ISO_DATE_FORMAT = '%Y-%m-%dT%H:%M:%S.%fZ'
 
 _bq_client: bq_client.BqClient = bq_client.BqClient(default_scopes=[
     'https://www.googleapis.com/auth/drive',
@@ -210,10 +212,10 @@ def create_taxonomy_spec_set(specs_json: Any,
           entity_type=json['entity_type'],
           advertiser_ids=json['advertiser_ids'],
           campaign_ids=json['campaign_ids'],
-          min_start_date=json['min_start_date'],
-          max_start_date=json['max_start_date'],
-          min_end_date=json['min_end_date'],
-          max_end_date=json['max_end_date'],
+          min_start_date=_from_iso_date(json['min_start_date']),
+          max_start_date=_from_iso_date(json['max_start_date']),
+          min_end_date=_from_iso_date(json['min_end_date']),
+          max_end_date=_from_iso_date(json['max_end_date']),
           dimensions=dimensions)
       specs[spec.name] = spec
 
@@ -224,6 +226,11 @@ def create_taxonomy_spec_set(specs_json: Any,
       specs=specs,
       fields=fields,
   )
+
+
+def _from_iso_date(date_value: str) -> datetime.date:
+  return datetime.strptime(date_value,
+                           _ISO_DATE_FORMAT).date() if date_value else None
 
 
 if __name__ == '__main__':

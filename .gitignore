@@ -13,6 +13,7 @@ resources/apps_script/configurator/.clasp.json
 resources/apps_script/validator/.clasp.json
 **/testing/**
 *test.py
+Code_test.js
 
 # C extensions
 *.so
