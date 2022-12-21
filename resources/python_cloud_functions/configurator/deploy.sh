@@ -15,6 +15,7 @@
 #
 # Deploy configurator
 PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 gcloud iam service-accounts create taxonomy-wizard-configurator \
     --description="Service account for Taxonomy Wizard Configurator component." \
@@ -44,7 +45,7 @@ gcloud functions deploy configurator \
 --gen2 \
 --region=us-central1 \
 --runtime=python310 \
---source=. \
+--source=$SCRIPT_DIR \
 --entry-point=handle_request \
 --service-account=taxonomy-wizard-configurator@${PROJECT_ID}.iam.gserviceaccount.com \
 --trigger-http \
@@ -53,11 +54,14 @@ gcloud functions deploy configurator \
 
 echo "█████████████████████████████████████████████████████████████████████████
 ██                                                                     ██
-██                      DEPLOYMENT SCRIPT COMPLETE                     ██
+██                        ADMIN BACKEND DEPLOYED                       ██
 ██                                                                     ██
+██  Make sure you move the Configurator sheet's Apps Script to the     ██
+██  same project you deployed to.                                      ██
+██                                                                     ██
+██  You may need to configure the OAuth Consent screen as well:        ██
+██    User Type: Internal.                                             ██
+██    Enter App name (e.g., 'Taxonomy Wizard').                        ██
+██    Enter Support and Contact email address (e.g., your email).      ██
 █████████████████████████████████████████████████████████████████████████
-Make sure you move the Configurator sheet's Apps Script to the same project you deployed to.
-You may need to configure the OAuth Consent screen when doing this:
-  User Type: Internal.
-  Enter App name (e.g., 'Taxonomy Wizard').
-  Enter Support and Contact email address (e.g., your email address)."
+"

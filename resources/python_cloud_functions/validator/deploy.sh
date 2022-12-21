@@ -16,11 +16,7 @@
 # Deploy validator
 
 PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
-
-
-# gcloud iam service-accounts create taxonomy-wizard-validation-invoker \
-#     --description="Service account for cloud scheduler to invoke Validator." \
-#     --display-name="Taxonomy Wizard Cloud Scheduler Validation Invoker."
+SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 gcloud iam service-accounts create taxonomy-wizard-validator \
     --description="Service account for Taxonomy Wizard Validator component." \
@@ -52,7 +48,7 @@ gcloud functions deploy validator \
   --gen2 \
   --region=us-central1 \
   --runtime=python310 \
-  --source=. \
+  --source=$SCRIPT_DIR \
   --entry-point=handle_request \
   --service-account=taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com \
   --trigger-http \
@@ -60,8 +56,7 @@ gcloud functions deploy validator \
   --ignore-file=.gcloudignore
 
 
-## TODO(blevitan): Move this to the apps_script/validator directory
-# PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
+PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
 URI=$(gcloud functions describe validator --gen2 --format="value(serviceConfig.uri)" --region=us-central1)
 ESCAPED_URI=$(sed 's/[&/\]/\\&/g' <<<"$URI")
 sed -i \
@@ -81,12 +76,6 @@ gcloud scheduler jobs create http validator-scheduler \
 
 echo "█████████████████████████████████████████████████████████████████████████
 ██                                                                     ██
-██                      DEPLOYMENT SCRIPT COMPLETE                     ██
+██                    VALIDATION BACKEND DEPLOYED                      ██
 ██                                                                     ██
 █████████████████████████████████████████████████████████████████████████
-Make sure you move the Validator Plugin's Apps Script to the same project you deployed to.
-You may need to configure the OAuth Consent screen when doing this:
-  User Type: Internal.
-  Enter App name (e.g., 'Taxonomy Wizard').
-  Add 'google.com' as an 'Authorized Domain'.
-  Enter Support and Contact email address (e.g., your email address)."

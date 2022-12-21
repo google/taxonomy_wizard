@@ -10,10 +10,14 @@ __pycache__/
 *.py[cod]
 .vscode
 resources/apps_script/configurator/.clasp.json
+resources/apps_script/configurator/.claspignore
 resources/apps_script/validator/.clasp.json
+resources/apps_script/validator/.claspignore
+
 **/testing/**
 *test.py
 Code_test.js
+
 
 # C extensions
 *.so
