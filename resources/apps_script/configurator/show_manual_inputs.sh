@@ -19,9 +19,13 @@ PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 URI=$(gcloud functions describe configurator --gen2 --format="value(serviceConfig.uri)" --region=us-central1)
-
+PROJECT_NUMBER=$(gcloud projects list --filter="${PROJECT_ID}" --format="value(PROJECT_NUMBER)")
 echo "*******************************************************
-CONFIGURATOR CLOUD FUNCTION ENDPOINT:
+Project Id: ${PROJECT_ID}
+
+Project Number: ${PROJECT_NUMBER}
+
+Configurator Cloud Function Endpoint:
   ${URI}
 *******************************************************
 "
