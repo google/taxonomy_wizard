@@ -60,7 +60,7 @@ function createSidebarHtml(specs){
     (prev, spec) =>
       prev + `<li class='radio'><label class='field'><input type='radio' name='spec_name' value='${spec.name}'/>${spec.name}</label>\n`,
     '\n')
-    // TODO(blevitan): Replace with non-hacky HTML method.
+    // TODO: Replace with more durable HTML method.
     .replace(`value='${specs[0].name}'`, `value='${specs[0].name}' checked`);
 
   return HtmlService.createHtmlOutput(SIDEBAR_HTML_PRE + radios + SIDEBAR_HTML_POST).setTitle('Taxonomy Wizard');
@@ -167,7 +167,7 @@ function submitRequest(endpoint,
                       payload = null,
                       options = null,
                       httpMethod = "GET") {
-let response;
+  let response;
 
   if (!options) {
     options = {};

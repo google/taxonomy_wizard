@@ -9,10 +9,8 @@ resources/python_cloud_functions/configurator/jinja_templates/delimited_validato
 __pycache__/
 *.py[cod]
 .vscode
-resources/apps_script/configurator/.clasp.json
-resources/apps_script/configurator/.claspignore
-resources/apps_script/validator/.clasp.json
-resources/apps_script/validator/.claspignore
+*.clasp.json
+*.claspignore
 
 **/testing/**
 *test.py

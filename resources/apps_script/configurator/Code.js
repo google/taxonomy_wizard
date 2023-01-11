@@ -62,9 +62,10 @@ const OBJECTS_TO_GENERATE_ = [{
 function onOpen(e) {
   SpreadsheetApp.getUi()
     .createMenu('Taxonomy Wizard')
-    // .addItem('Add/Update Specs', 'addAdditionalSpecs')
-    // .addItem('Delete All Existing Specs', 'DeleteAllExistingSpecs')
-    .addItem('Overwrite All Existing Specs', 'overwriteExistingSpecs')
+    .addItem('Overwrite All Specs', 'overwriteSpecs')
+    // TODO: Uncomment when implemented in Cloud Function.
+    // .addItem('Add/Update Specs', 'updateSpecs')
+    // .addItem('Delete All Specs', 'DeleteAllSpecs')
     .addSeparator()
     .addItem('Authorize User', 'authorizeUser')
     .addItem('Revoke User Authorization', 'revokeUserAuthorization')
@@ -87,19 +88,18 @@ function revokeUserAuthorization() {
 }
 
 
-function addAdditionalSpecs() {
+function updateSpecs() {
   generateAllConfigData("update");
-  // TODO(blevitan): Implement in Cloud Function.
 }
 
 
-function overwriteExistingSpecs() {
+function overwriteSpecs() {
   generateAllConfigData("overwrite");
 }
 
 
-function deleteAllExistingSpecs() {
-  // TODO(blevitan): Implement.
+function deleteAllSpecs() {
+  // TODO: Implement.
 }
 
 /**
@@ -307,7 +307,7 @@ function _keyValueObjectGenerator(sht,
     if (filter_column != null && !sht.getRange(r + val_row_offset, filter_column).getValue()) {
       return null;
     }
-    // TODO(blevitan): implement with getValues and an Array.prototype.filter.
+    // TODO: implement with getValues and an Array.prototype.filter.
     for (var c = key_col_start; c <= key_col_end; c++) {
       var key = sht.getRange(r, c).getValue();
       if (key != '') {
