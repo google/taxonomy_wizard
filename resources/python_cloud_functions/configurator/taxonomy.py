@@ -84,7 +84,7 @@ class Field:
 
     table_def.external_data_configuration = external_config
 
-    # TODO(blevitan): Pass this in to the constructor (everywhere else too).
+    # TODO: Pass this in to the constructor (everywhere else too).
     client = self.bq_client
     client.delete_table(self.table_id, not_found_ok=True)
 

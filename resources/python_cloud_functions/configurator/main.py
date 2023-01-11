@@ -23,7 +23,7 @@ import flask
 from taxonomy import Dimension, Field, Specification, SpecificationSet
 import bq_client
 
-# TODO(blevitan): Replace `Any` with more specific type info.
+# TODO: Replace `Any` with more specific type info.
 RequestJson = dict[str, Any]
 
 _SUCCESS_MESSAGE = 'Successfully generated tables.'
@@ -52,7 +52,7 @@ def handle_request(request: flask.Request):
     dataset: str = request.args.get("taxonomy_bigquery_dataset")
     request_body_json: RequestJson = request.get_json()
 
-    # TODO(blevitan): Figure out why both these need to be set.
+    # TODO: Figure out why both these need to be set.
     os.environ['GOOGLE_CLOUD_PROJECT'] = project_id
     os.environ['GCP_PROJECT'] = project_id
 

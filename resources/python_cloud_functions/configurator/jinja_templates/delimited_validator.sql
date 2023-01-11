@@ -27,8 +27,8 @@ WITH
         {{dim.extra_data_regex}}) as d_extra_data,
   {%- endif -%}
 {%- endfor %}
-{# TODO(blevitan): Figure out better long-term strategy for variable here
-                   (vs currently overloading SQL variable syntax ) #}
+{# TODO: Figure out better long-term strategy for variable here
+         (vs currently overloading SQL variable syntax ) #}
     FROM @entity_names as name
 {%- for dim in spec.dimensions.values() if dim.requires_crossjoin_validation %}
     CROSS JOIN `{{ dim.field_spec.table_id }}` AS D_{{ dim.index }}
