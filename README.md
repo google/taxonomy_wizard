@@ -63,3 +63,5 @@ The tool will:
 ## Usage Instructions
 *Coming Soon...*
 <!--TODO: Implement.-->
+## Disclaimer
+*This is **NOT** an officially supported Google product.*

@@ -2,7 +2,7 @@ __pycache__
 .pytest_cache
 .vscode
 venv*
-configurator.code-workspace
+*.code-workspace
 *test.py
 deploy.sh
 TEMP*
