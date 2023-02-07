@@ -15,24 +15,24 @@
 #
 # Deploy validator
 
-PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 gcloud iam service-accounts create taxonomy-wizard-validator \
-    --description="Service account for Taxonomy Wizard Validator component." \
-    --display-name="Taxonomy Wizard Validator Service Account"
+  --description="Service account for Taxonomy Wizard Validator component." \
+  --display-name="Taxonomy Wizard Validator Service Account"
 
 gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-    --member="serviceAccount:taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --role="roles/cloudfunctions.invoker"
+  --member="serviceAccount:taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/cloudfunctions.invoker"
 
 gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-    --member="serviceAccount:taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --role="roles/bigquery.dataViewer"
+  --member="serviceAccount:taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/bigquery.dataViewer"
 
 gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-    --member="serviceAccount:taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --role="roles/bigquery.jobUser"
+  --member="serviceAccount:taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/bigquery.jobUser"
 
 gcloud services enable artifactregistry.googleapis.com
 gcloud services enable bigquery.googleapis.com
@@ -55,15 +55,13 @@ gcloud functions deploy validator \
   --no-allow-unauthenticated \
   --ignore-file=.gcloudignore
 
-
-PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
+PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
 URI=$(gcloud functions describe validator --gen2 --format="value(serviceConfig.uri)" --region=us-central1)
 ESCAPED_URI=$(sed 's/[&/\]/\\&/g' <<<"$URI")
 sed -i \
   -e "s/const CLOUD_FUNCTION_URI = .*/const CLOUD_FUNCTION_URI = '${ESCAPED_URI}';/g" \
   -e "s/const TAXONOMY_CLOUD_PROJECT_ID = .*/const TAXONOMY_CLOUD_PROJECT_ID = '${PROJECT_ID}';/g" \
   ../../apps_script/validator/CONFIG.js
-
 
 gcloud scheduler jobs create http validator-scheduler \
   --schedule="5 4 * * *" \
@@ -79,3 +77,4 @@ echo "████████████████████████�
 ██                    VALIDATION BACKEND DEPLOYED                      ██
 ██                                                                     ██
 █████████████████████████████████████████████████████████████████████████
+"
