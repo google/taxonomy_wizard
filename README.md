@@ -21,8 +21,8 @@ The tool will:
     * DV360, SA360, and Google Ads may be supported on request.
 
 ### Deployment
-1. [Choose an existing](https://console.cloud.google.com/home/dashboard){.external}
- or [create a new](https://console.cloud.google.com/projectcreate){.external}
+1. [Choose an existing](https://console.cloud.google.com/home/dashboard)
+ or [create a new](https://console.cloud.google.com/projectcreate)
  Google Cloud project (e.g., `taxonomy-wizard-yourcompanyname`).
 2. Click the *Cloud Shell* icon ( <span style="background:#DDDDDD;color: #0000FF">&nbsp;>_&nbsp;</span>&nbsp;) in the top right.
 3. Clone the Taxonomy Wizard repo:
@@ -39,9 +39,9 @@ The tool will:
    *(Installs the Taxonomy Wizard [Configurator](./resources/python_cloud_functions/configurator/) & [Validator](./resources/python_cloud_functions/validator/) Cloud resources and updates the Sheets [Validator plugin code](./resources/apps_script/validator/) to point to the correct project).*
    * Note the *Project Id*, *Project Number* and *Configurator Cloud Function Endpoint* shown at script completion.
 
-5. Copy the [Taxonomy Wizard Admin sheet](https://docs.google.com/spreadsheets/d/1whiGO5DfOBBXyMhEnLyCztegrUns-I-fn56EdDzb51o/copy){.external}
+5. Copy the [Taxonomy Wizard Admin sheet](https://docs.google.com/spreadsheets/d/1whiGO5DfOBBXyMhEnLyCztegrUns-I-fn56EdDzb51o/copy)
 .
-    * May require joining the [*taxonomy-wizard-users*](https://groups.google.com/g/taxonomy-wizard-users){.external}
+    * May require joining the [*taxonomy-wizard-users*](https://groups.google.com/g/taxonomy-wizard-users)
  Google group.
 
 ### Initial Configuration
@@ -62,7 +62,7 @@ The tool will:
 ### Sheets Validation Plugin
 *Allows you to validate entity names in Google Sheets before creating them in the Google advertising system(s).*
 1. Copy the code from the `.js` files in `./resources/apps_script/validator` to an Apps Script project.
-2. [Publish](https://developers.google.com/workspace/marketplace/how-to-publish{.external}
+2. [Publish](https://developers.google.com/workspace/marketplace/how-to-publish
  it **PRIVATELY** (to your company's org ONLY) as an add-on.
 
 ## Usage Instructions
