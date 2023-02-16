@@ -42,5 +42,5 @@ six==1.16.0
 tomli==2.0.1
 uritemplate==4.1.1
 urllib3==1.26.12
-Werkzeug==2.2.2
+Werkzeug==2.2.3
 yapf==0.32.0
