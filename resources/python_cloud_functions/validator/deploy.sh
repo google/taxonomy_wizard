@@ -57,11 +57,6 @@ gcloud functions deploy validator \
 
 PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
 URI=$(gcloud functions describe validator --gen2 --format="value(serviceConfig.uri)" --region=us-central1)
-ESCAPED_URI=$(sed 's/[&/\]/\\&/g' <<<"$URI")
-sed -i \
-  -e "s/const CLOUD_FUNCTION_URI = .*/const CLOUD_FUNCTION_URI = '${ESCAPED_URI}';/g" \
-  -e "s/const TAXONOMY_CLOUD_PROJECT_ID = .*/const TAXONOMY_CLOUD_PROJECT_ID = '${PROJECT_ID}';/g" \
-  ../../apps_script/validator/CONFIG.js
 
 gcloud scheduler jobs create http validator-scheduler \
   --schedule="5 4 * * *" \

@@ -14,24 +14,24 @@
 # limitations under the License.
 #
 # Deploy configurator
-PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 gcloud iam service-accounts create taxonomy-wizard-configurator \
-    --description="Service account for Taxonomy Wizard Configurator component." \
-    --display-name="Taxonomy Wizard Configurator Service Account"
+  --description="Service account for Taxonomy Wizard Configurator component." \
+  --display-name="Taxonomy Wizard Configurator Service Account"
 
 gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-    --member="serviceAccount:taxonomy-wizard-configurator@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --role="roles/bigquery.dataViewer"
+  --member="serviceAccount:taxonomy-wizard-configurator@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/bigquery.dataViewer"
 
 gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-    --member="serviceAccount:taxonomy-wizard-configurator@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --role="roles/bigquery.dataEditor"
+  --member="serviceAccount:taxonomy-wizard-configurator@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/bigquery.dataEditor"
 
 gcloud projects add-iam-policy-binding ${PROJECT_ID} \
-    --member="serviceAccount:taxonomy-wizard-configurator@${PROJECT_ID}.iam.gserviceaccount.com" \
-    --role="roles/bigquery.jobUser"
+  --member="serviceAccount:taxonomy-wizard-configurator@${PROJECT_ID}.iam.gserviceaccount.com" \
+  --role="roles/bigquery.jobUser"
 
 gcloud services enable run.googleapis.com
 gcloud services enable artifactregistry.googleapis.com
@@ -40,17 +40,16 @@ gcloud services enable cloudfunctions.googleapis.com
 gcloud services enable iam.googleapis.com
 gcloud services enable bigquery.googleapis.com
 
-
 gcloud functions deploy configurator \
---gen2 \
---region=us-central1 \
---runtime=python310 \
---source=$SCRIPT_DIR \
---entry-point=handle_request \
---service-account=taxonomy-wizard-configurator@${PROJECT_ID}.iam.gserviceaccount.com \
---trigger-http \
---no-allow-unauthenticated \
---ignore-file=.gcloudignore
+  --gen2 \
+  --region=us-central1 \
+  --runtime=python310 \
+  --source=$SCRIPT_DIR \
+  --entry-point=handle_request \
+  --service-account=taxonomy-wizard-configurator@${PROJECT_ID}.iam.gserviceaccount.com \
+  --trigger-http \
+  --no-allow-unauthenticated \
+  --ignore-file=.gcloudignore
 
 echo "█████████████████████████████████████████████████████████████████████████
 ██                                                                     ██

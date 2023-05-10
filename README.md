@@ -28,7 +28,7 @@ The tool will:
 3. Clone the Taxonomy Wizard repo:
 
     ```shell
-    git clone https://professional-services.googlesource.com/solutions/taxonomy_wizard
+    git clone git clone https://github.com/google/taxonomy_wizard
     ```
 
 4. Run the deploy and follow the script prompt:

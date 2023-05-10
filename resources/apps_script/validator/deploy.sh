@@ -15,13 +15,11 @@
 #
 # Update validator script.
 
-PROJECT_ID=$(gcloud config get-value project 2> /dev/null)
+PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
 
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 URI=$(gcloud functions describe validator --gen2 --format="value(serviceConfig.uri)" --region=us-central1)
-
-ESCAPED_URI=$(sed 's/[&/\]/\\&/g' <<<"$URI")
 
 sed -i \
   -e "s/const CLOUD_FUNCTION_URI = .*/const CLOUD_FUNCTION_URI = '${ESCAPED_URI}';/g" \
