@@ -15,7 +15,7 @@
 #
 # Deploy validator
 
-PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
+PROJECT_ID=$(gcloud config get project 2>/dev/null)
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 gcloud iam service-accounts create taxonomy-wizard-validator \

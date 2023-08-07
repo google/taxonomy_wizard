@@ -20,26 +20,28 @@ import hashlib
 import json
 from typing import Mapping, Sequence
 
+_MANDATORY_SCOPES = [
+    'https://www.googleapis.com/auth/drive',
+    'https://www.googleapis.com/auth/bigquery',
+    'https://www.googleapis.com/auth/cloud-platform',
+    'https://www.googleapis.com/auth/spreadsheets',
+]
+
 
 class BqClient():
   """Class to minimize # of `bigquery.Client` instances (1/set of scopes)."""
   _clients: Mapping[str, bigquery.Client] = dict()
-  _DEFAULT_SCOPES: Sequence[str]
 
-  def __init__(self, default_scopes):
-    self._DEFAULT_SCOPES = default_scopes
-
-  def get(self, scopes: Sequence[str] = []) -> bigquery.Client:
+  def get(self, additional_scopes: Sequence[str] = []) -> bigquery.Client:
     """Gets/creates `bigquery.Client` with the required scopes.
 
     Args:
-        scopes (Sequence[str], optional): Scopes to use. Defaults to `DEFAULT_SCOPES`.
+        scopes (Sequence[str], optional): Additioanl Scopes to use.
 
     Returns:
         bigquery.Client: bigquery.Client with the required scopes.
     """
-    if not scopes:
-      scopes = self._DEFAULT_SCOPES
+    scopes = _MANDATORY_SCOPES + additional_scopes
 
     scopes.sort()
     uid: str = hashlib.md5(json.dumps(scopes).encode('utf-8')).hexdigest()
@@ -47,6 +49,6 @@ class BqClient():
     if not self._clients.get(uid):
       credentials, project = auth.default(scopes=scopes)
       self._clients[uid] = bigquery.Client(credentials=credentials,
-                                          project=project)
+                                           project=project)
 
     return self._clients[uid]

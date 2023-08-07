@@ -12,30 +12,24 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 #
-""" Validates names submitted according to specified Taxonomy."""
+""" Validates/update names submitted according to specified Taxonomy."""
 
 from collections.abc import Sequence
 import flask
 import os
 from google.cloud import bigquery
-from sources.source import RawJsonValidatorSource, ProductSourceFilter, ValidatorProductSource, NamesInput, NamesInput
-from sources.campaign_manager.campaign_manager_source import CampaignManagerValidatorSource
+from updaters.updater import BaseUpdater, GoogleAPIClientUpdater, UpdaterFactory
+from base import NamesInput
+from validators.validator import BaseValidator, RawJsonValidator, ProductValidator
 import bq_client
+from validators.validator import ValidatorFactory
 
-_ListSpecsResponseJson = list[dict[str, str]]
-_ValidateNamesResponseJson = dict[str, list[NamesInput]]
+_ListSpecsResponseJson = Sequence[dict[str, str]]
+_ValidateNamesResponseJson = dict[str, Sequence[NamesInput]]
 
 VALIDATION_RESULTS_TABLE: str = 'validation_results'
 
-_bq_client: bq_client.BqClient = bq_client.BqClient(default_scopes=[
-    'https://www.googleapis.com/auth/drive',
-    'https://www.googleapis.com/auth/bigquery',
-    'https://www.googleapis.com/auth/cloud-platform',
-    'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/dfareporting',
-    'https://www.googleapis.com/auth/dfatrafficking',
-    'https://www.googleapis.com/auth/ddmconversions',
-])
+_bq_client: bq_client.BqClient = bq_client.BqClient()
 
 
 def handle_request(request: flask.Request):
@@ -58,8 +52,12 @@ def handle_request(request: flask.Request):
       return validate_all_specs(project_id, dataset)
     elif action == 'validate_names':
       spec_name: str = request.args.get("spec_name")
-      data: list[NamesInput] = request.get_json()
+      data: Sequence[NamesInput] = request.get_json()
       return validate_entity_values(spec_name, data, project_id, dataset)
+    elif action == 'update_names':
+      spec_name: str = request.args.get("spec_name")
+      data: Sequence[NamesInput] = request.get_json()
+      return update_entity_values(spec_name, data, project_id, dataset)
     else:
       raise ValueError(
           f'Invalid or missing value for parameter "action": {data["action"]}.')
@@ -75,12 +73,23 @@ def list_specs(project_id: str, dataset: str) -> _ListSpecsResponseJson:
 
 
 def validate_all_specs(project_id: str, dataset: str):
-  specs = get_specifications(project_id, dataset)
+  validator_fields ='  advertiser_ids,\n'\
+                    '  campaign_ids,\n'\
+                    '  min_start_date,\n'\
+                    '  max_start_date,\n'\
+                    '  min_end_date,\n'\
+                    '  max_end_date,\n'\
+                    '  validation_query_template,\n'
+
+  specs = get_specifications(project_id, dataset, validator_fields)
 
   validation_results = []
   for spec in specs:
-    validator: ValidatorProductSource = choose_validator(
-        spec, project_id, dataset)
+    validator: ProductValidator = ValidatorFactory.get(
+        spec=spec,
+        project_id=project_id,
+        dataset=dataset,
+        bq_client=_bq_client.get())
     results: Sequence[NamesInput] = validator.validate()
     validation_results.extend(results)
 
@@ -89,54 +98,21 @@ def validate_all_specs(project_id: str, dataset: str):
   return "Successfully ran validation.", 200, None
 
 
-def get_specifications(project_id: str, dataset: str):
+def get_specifications(project_id: str,
+                       dataset: str,
+                       additional_fields: str = "",
+                       where_clause: str = "TRUE"):
   client: bigquery.Client = _bq_client.get()
-  query = "SELECT\n"\
-        "  name,\n"\
-        "  product,\n"\
-        "  customer_owner_id,\n"\
-        "  entity_type,\n"\
-        "  advertiser_ids,\n"\
-        "  campaign_ids,\n"\
-        "  min_start_date,\n"\
-        "  max_start_date,\n"\
-        "  min_end_date,\n"\
-        "  max_end_date,\n"\
-        "  validation_query_template,\n"\
-       f"FROM `{project_id}.{dataset}.specifications`"
+  query = 'SELECT\n'\
+           '  name,\n'\
+           '  product,\n'\
+           '  customer_owner_id,\n'\
+           '  entity_type,\n'\
+           f'  {additional_fields}\n'\
+           f'FROM `{project_id}.{dataset}.specifications`\n'\
+           f'WHERE {where_clause}'
   specs = client.query(query).result()
   return specs
-
-
-def choose_validator(spec, cloud_project_id, bigquery_dataset):
-  product = spec['product']
-
-  if product == 'Campaign Manager':
-    filter = ProductSourceFilter(customer_owner_id=spec['customer_owner_id'],
-                                 advertiser_ids=spec['advertiser_ids'],
-                                 campaign_ids=spec['campaign_ids'],
-                                 min_start_date=spec['min_start_date'],
-                                 max_start_date=spec['max_start_date'],
-                                 min_end_date=spec['min_end_date'],
-                                 max_end_date=spec['max_end_date'])
-
-    validator: ValidatorProductSource = CampaignManagerValidatorSource(
-        cloud_project=cloud_project_id,
-        bigquery_dataset=bigquery_dataset,
-        bq_client=_bq_client.get(),
-        spec_name=spec['name'],
-        product=spec['product'],
-        entity_type=spec['entity_type'],
-        base_row_data=spec,
-        filter=filter)
-
-  elif product in ('DV360', 'Google Ads', 'SA360'):
-    raise NotImplementedError(
-        f'Support for "{product}" has not been implemented yet.')
-
-  else:
-    raise KeyError(f'Unsupported value for "product" field: "{product}".')
-  return validator
 
 
 def persist_results(data: list[dict[str, str]], project_id, dataset):
@@ -170,22 +146,36 @@ def persist_results(data: list[dict[str, str]], project_id, dataset):
     print(f'Added {len(data)} row{"s" if len(data)!=1 else ""} to table.')
 
 
-def set_google_cloud_project_env_var(id):
-  os.environ['GOOGLE_CLOUD_PROJECT'] = id
-
-
-def validate_entity_values(spec_name: str, values: list[NamesInput],
+def validate_entity_values(spec_name: str, values: Sequence[NamesInput],
                            project_id: str,
                            dataset: str) -> _ValidateNamesResponseJson:
-  validator: RawJsonValidatorSource = RawJsonValidatorSource(
-      cloud_project=project_id,
-      bigquery_dataset=dataset,
-      bq_client=_bq_client.get(),
-      spec_name=spec_name,
-      values_to_validate=values,
-      base_row_data={})
+  validator: RawJsonValidator = RawJsonValidator(cloud_project=project_id,
+                                                 bigquery_dataset=dataset,
+                                                 bq_client=_bq_client.get(),
+                                                 spec_name=spec_name,
+                                                 values_to_validate=values,
+                                                 base_row_data={})
 
   results = validator.validate()
+
+  return {'results': results}
+
+
+def update_entity_values(spec_name: str, updates: Sequence[NamesInput],
+                         project_id: str,
+                         dataset: str) -> _ValidateNamesResponseJson:
+
+  escaped_spec_name = spec_name.replace("'", "\\'")
+  where_clause = f"name = '{escaped_spec_name}'"
+  spec = next(get_specifications(project_id, dataset,
+                                 where_clause=where_clause))
+
+  updater: BaseUpdater = UpdaterFactory.get(spec=spec,
+                                            updates=updates,
+                                            project_id=project_id,
+                                            dataset=dataset,
+                                            bq_client=_bq_client.get())
+  results = updater.apply_updates()
 
   return {'results': results}
 
