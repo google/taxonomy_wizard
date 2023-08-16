@@ -22,7 +22,6 @@ from typing import Mapping, Sequence
 Primitives = str | int | float | bool
 NamesInput = dict[str, Primitives]
 
-
 import json
 import sys
 from typing import Mapping
@@ -32,25 +31,9 @@ from google.cloud import bigquery
 from base import Primitives
 
 
-def register_interfacers(class_prefix: str,
-                         registrations_file: str) -> Mapping[str, str]:
-  with open(registrations_file, 'r') as f:
-    mappings: Mapping[str, str] = json.load(f)
-    builders: Mapping(str, type) = dict()
-
-  for k in mappings:
-    full_path = f'{class_prefix}{mappings[k]}Builder'.split('.')
-    module_name = '.'.join(full_path[0:-1])
-    class_name = full_path[-1]
-    __import__(module_name)
-    module = sys.modules[module_name]
-    builders[k.upper()] = getattr(module, class_name)
-
-  return builders
-
 @define(auto_attribs=True)
 class BaseInterfacer():
-  """Base class for all interfaces in the Validator web function.
+  """Base class for all Interfacers in the Validator web function.
 
   Attributes:
     cloud_project (str): Project running Taxonomy Wizard server-side.
@@ -113,10 +96,30 @@ class BaseInterfacer():
 
 
 class BaseInterfacerFactory():
+  UPDATERS_CLASS_PREFIX: str = ''
+  UPDATER_REGISTRATIONS_FILE: str = ''
+
   _builders: Mapping[str, BaseInterfacer] = None
 
   def __init__(self):
     self._instance = None
+    if self.UPDATER_REGISTRATIONS_FILE:
+      self.register_interfacers()
+
+  def register_interfacers(self) -> Mapping[str, str]:
+    with open(self.UPDATER_REGISTRATIONS_FILE, 'r') as f:
+      mappings: Mapping[str, str] = json.load(f)
+      builders: Mapping(str, type) = dict()
+
+    for k in mappings:
+      full_path = f'{self.UPDATERS_CLASS_PREFIX}{mappings[k]}Builder'.split('.')
+      module_name = '.'.join(full_path[0:-1])
+      class_name = full_path[-1]
+      __import__(module_name)
+      module = sys.modules[module_name]
+      builders[k.upper()] = getattr(module, class_name)
+
+    return builders
 
   @classmethod
   def register(cls, product: str, interfacer_class: type):
@@ -137,7 +140,7 @@ class BaseInterfacerFactory():
 
     Raises:
         NotImplementedError: If `spec['product']` contains a Google product
-          that does not have a Validator implemented.
+          that does not have an Interfacer implemented.
         KeyError: If `spec['product']` contains an unrecognized value.
     """
 
@@ -148,7 +151,8 @@ class BaseInterfacerFactory():
     return builder(spec=spec,
                    project_id=project_id,
                    dataset=dataset,
-                   bq_client=bq_client, **kwargs)
+                   bq_client=bq_client,
+                   **kwargs)
 
 
 class BaseInterfacerBuilder():
@@ -166,7 +170,7 @@ class BaseInterfacerBuilder():
 
     Args:
       spec (Mapping[str, Primitives]): Has keys of 'product', 'entity_type', and
-        'customer_owner_id' to determine and initialize the Validator.
+        'customer_owner_id' to determine and initialize the Interfacer.
       updates (Sequence[UpdatableEntity]): List of updates to be made.
       project_id (str): Project running Taxonomy Wizard server-side.
       dataset (str): Dataset containing taxonomy data.

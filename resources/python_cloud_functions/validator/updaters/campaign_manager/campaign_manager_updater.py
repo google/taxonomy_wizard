@@ -86,11 +86,11 @@ class CampaignManagerUpdaterBuilder(BaseInterfacerBuilder):
   def __call__(self, spec: Mapping[str, Primitives],
                updates: Sequence[NamesInput], project_id: str, dataset: str,
                bq_client: bigquery.Client) -> CampaignManagerUpdater:
-    """Returns an initialized Validator based on values in `spec`.
+    """Returns an initialized Updater based on values in `spec`.
 
     Args:
       spec (Mapping[str, Primitives]): Has keys of 'product', 'entity_type', and
-        'customer_owner_id' to determine and initialize the Validator.
+        'customer_owner_id' to determine and initialize the Updater.
       updates (Sequence[UpdatableEntity]): List of updates to be made.
       project_id (str): Project running Taxonomy Wizard server-side.
       dataset (str): Dataset containing taxonomy data.

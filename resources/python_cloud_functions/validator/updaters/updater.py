@@ -24,8 +24,7 @@ from google.cloud import bigquery
 from googleapiclient import discovery
 from googleapiclient.http import BatchHttpRequest
 
-from base import BaseInterfacer, BaseInterfacerBuilder, BaseInterfacerFactory, NamesInput, Primitives, register_interfacers
-from validators.validator import BaseValidator
+from base import BaseInterfacer, BaseInterfacerBuilder, BaseInterfacerFactory, NamesInput, Primitives
 
 DEFAULT_MAX_TRIES = 3
 DEFAULT_MAX_REQUESTS_PER_MINUTE = 60
@@ -275,5 +274,5 @@ class GoogleAPIClientUpdater(BaseUpdater):
 
 
 class UpdaterFactory(BaseInterfacerFactory):
-  _builders: Mapping[str, BaseValidator] = (register_interfacers(
-      UPDATERS_CLASS_PREFIX, UPDATER_REGISTRATIONS_FILE))
+  UPDATERS_CLASS_PREFIX = UPDATERS_CLASS_PREFIX
+  UPDATER_REGISTRATIONS_FILE = UPDATER_REGISTRATIONS_FILE

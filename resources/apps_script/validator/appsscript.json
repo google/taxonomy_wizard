@@ -21,16 +21,17 @@
   ],
   "addOns": {
     "common": {
-      "name": "Taxonomy Wizard -",
-      "logoUrl": "https://www.maxpixel.net/static/photo/1x/Magician-Mystery-Magic-Wizard-Magical-Trick-1454385.png",
+      "name": "Taxonomy Wizard - Validator",
+      "logoUrl": "https://cdn.pixabay.com/photo/2016/06/13/14/57/wizard-1454385_1280.png",
       "layoutProperties": {
         "primaryColor": "#2772ed"
       }
     },
     "sheets": {
       "homepageTrigger": {
-        "runFunction": "onOpen"
+        "runFunction": "onHomepage"
       }
     }
-  }
+  },
+  "urlFetchWhitelist": ["https://notarealurl.cloudfunction.google.com/"]
 }

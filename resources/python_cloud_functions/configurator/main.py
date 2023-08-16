@@ -18,7 +18,7 @@ import os
 import re
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, OrderedDict
+from typing import Any, Mapping, OrderedDict, Sequence
 import flask
 from taxonomy import Dimension, Field, Specification, SpecificationSet
 import bq_client
@@ -48,15 +48,17 @@ def handle_request(request: flask.Request):
   """
   try:
     action: str = request.args.get("action")
-    project_id: str = request.args.get("taxonomy_cloud_project_id")
-    dataset: str = request.args.get("taxonomy_bigquery_dataset")
-    request_body_json: RequestJson = request.get_json()
+    payload: Mapping[str:Sequence[RequestJson] | str] = request.get_json()
+    project_id: str = payload['taxonomy_cloud_project_id']
+    dataset: str = payload['taxonomy_bigquery_dataset']
+
+    spec_data: RequestJson = payload['data']
 
     # TODO: Figure out why both these need to be set.
     os.environ['GOOGLE_CLOUD_PROJECT'] = project_id
     os.environ['GCP_PROJECT'] = project_id
 
-    spec_set = create_objects(request_body_json, project_id, dataset)
+    spec_set = create_objects(spec_data, project_id, dataset)
     response = push_to_database(action, spec_set)
   except Exception as e:
     return str(e), 400, None

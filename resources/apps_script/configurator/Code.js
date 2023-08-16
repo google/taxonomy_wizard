@@ -24,11 +24,11 @@ const HTTP_STATUS_MIN_ERROR_VALUE_ = 400;
 const HTTP_STATUS_MAX_ERROR_VALUE_ = 599;
 const NUM_RETRIES = 3;
 
-const _CLOUD_FUNCTION_ENDPOINT_RANGE_NAME ='CloudFunctionEndpoint';
-const _CLOUD_PROJECT_RANGE_NAME ='TaxonomyCloudProjectId';
-const _BQ_DATASET_RANGE_NAME ='TaxonomyBigQueryDataset';
-const _CLOUD_FUNCTION_API_ENDPOINT ='https://cloudfunctions.googleapis.com/v2/';
-const _CONFIGURATOR_FUNCTION_NAME ='configurator';
+const _CLOUD_FUNCTION_ENDPOINT_RANGE_NAME = 'CloudFunctionEndpoint';
+const _CLOUD_PROJECT_RANGE_NAME = 'TaxonomyCloudProjectId';
+const _BQ_DATASET_RANGE_NAME = 'TaxonomyBigQueryDataset';
+const _CLOUD_FUNCTION_API_ENDPOINT = 'https://cloudfunctions.googleapis.com/v2/';
+const _CONFIGURATOR_FUNCTION_NAME = 'configurator';
 
 
 
@@ -78,13 +78,13 @@ function onInstall(e) {
 
 /** Authorizes user (if needed). */
 function authorizeUser() {
-   ScriptApp.getOAuthToken();
+  ScriptApp.getOAuthToken();
 }
 
 /** Revokes authorization of current user. */
 function revokeUserAuthorization() {
-   ScriptApp.invalidateAuth();
-   console.log("User Authorization revoked.");
+  ScriptApp.invalidateAuth();
+  console.log("User Authorization revoked.");
 }
 
 
@@ -113,19 +113,31 @@ function generateAllConfigData(action) {
 
   let params = {
     'action': action,
-    'taxonomy_cloud_project_id': project_id,
-    "taxonomy_bigquery_dataset": dataset,
   }
 
   let data = [];
   for (const def of OBJECTS_TO_GENERATE_) {
     data.push(getSheetConfigDataForRequest(def));
   }
+  let payload = {
+    'taxonomy_cloud_project_id': project_id,
+    "taxonomy_bigquery_dataset": dataset,
+    "data": data,
+  }
+
 
   const configuratorEndpoint = SpreadsheetApp.getActiveSpreadsheet()
     .getRangeByName(_CLOUD_FUNCTION_ENDPOINT_RANGE_NAME)
     .getValue();
-  const response = submitRequest(configuratorEndpoint, params, data, null, "POST");
+
+  var htmlOutput = HtmlService
+    .createHtmlOutput('<p>Submitting request...</p>')
+    .setWidth(250)
+    .setHeight(150);
+  SpreadsheetApp.getUi().showModelessDialog(htmlOutput, 'Status');
+
+  const response = submitRequest(configuratorEndpoint, params, payload, null, "POST");
+
   if (response.status >= HTTP_STATUS_MIN_ERROR_VALUE_ &&
     response.status <= HTTP_STATUS_MAX_ERROR_VALUE_) {
     return false;
@@ -151,28 +163,28 @@ function generateAllConfigData(action) {
  * @return {!Object} Entities to create config data for.
  */
 function getSheetConfigDataForRequest(sheetDefinition) {
-      let entities = {
-      'type': sheetDefinition.entityType,
-      'data': []
-    };
-    const sht = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetDefinition.sheet);
-    const lastRowOffset = sht.getLastRow() - sheetDefinition.keyRow + 1;
+  let entities = {
+    'type': sheetDefinition.entityType,
+    'data': []
+  };
+  const sht = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetDefinition.sheet);
+  const lastRowOffset = sht.getLastRow() - sheetDefinition.keyRow + 1;
 
-    for (let rowOffset = sheetDefinition.valueRowOffset; rowOffset < lastRowOffset; rowOffset++) {
-      let kvObject = _keyValueObjectGenerator(
-          sht,
-          sheetDefinition.keyRow,
-          sheetDefinition.keyRow,
-          sheetDefinition.keyColumnStart,
-          sheetDefinition.keyColumnEnd,
-          rowOffset,
-          0,
-          sheetDefinition.filterColumn);
-      if (kvObject != null) {
-        entities.data.push(kvObject);
-      }
+  for (let rowOffset = sheetDefinition.valueRowOffset; rowOffset < lastRowOffset; rowOffset++) {
+    let kvObject = _keyValueObjectGenerator(
+      sht,
+      sheetDefinition.keyRow,
+      sheetDefinition.keyRow,
+      sheetDefinition.keyColumnStart,
+      sheetDefinition.keyColumnEnd,
+      rowOffset,
+      0,
+      sheetDefinition.filterColumn);
+    if (kvObject != null) {
+      entities.data.push(kvObject);
     }
-    return entities;
+  }
+  return entities;
 }
 
 
@@ -189,11 +201,11 @@ function getSheetConfigDataForRequest(sheetDefinition) {
   * @return {!Object} Cloud function response.
   */
 function submitRequest(endpoint,
-                      queryParameters = {},
-                      payload = null,
-                      options = null,
-                      httpMethod = "GET") {
-let response;
+  queryParameters = {},
+  payload = null,
+  options = null,
+  httpMethod = "GET") {
+  let response;
 
   if (!options) {
     options = {};
@@ -244,7 +256,7 @@ let response;
 
   if (FLAGS.LOG_RESPONSES) {
     console.log("Response code:" + response.getResponseCode());
-    console.log("Response payload: " +UrlFetchApp.getRequest(url, options).payload);
+    console.log("Response payload: " + UrlFetchApp.getRequest(url, options).payload);
   }
 
   if (response.getResponseCode() != 200) {

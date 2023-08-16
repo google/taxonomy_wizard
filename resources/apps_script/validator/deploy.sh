@@ -21,10 +21,16 @@ SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
 
 URI=$(gcloud functions describe validator --gen2 --format="value(serviceConfig.uri)" --region=us-central1)
 
+ESCAPED_URI=$(sed 's/[&/\]/\\&/g' <<<"$URI")
+
 sed -i \
   -e "s/const CLOUD_FUNCTION_URI = .*/const CLOUD_FUNCTION_URI = '${ESCAPED_URI}';/g" \
   -e "s/const TAXONOMY_CLOUD_PROJECT_ID = .*/const TAXONOMY_CLOUD_PROJECT_ID = '${PROJECT_ID}';/g" \
   ${SCRIPT_DIR}/CONFIG.js
+
+sed -i \
+  -e "s/\"urlFetchWhitelist\": .*/  \"urlFetchWhitelist\": \[\"${ESCAPED_URI}\"\]/g" \
+  ${SCRIPT_DIR}/appsscript.json
 
 echo "█████████████████████████████████████████████████████████████████████████
 ██                                                                     ██

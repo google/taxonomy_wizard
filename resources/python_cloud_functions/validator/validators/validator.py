@@ -20,8 +20,7 @@ from typing import Mapping, Sequence
 
 from google.cloud import bigquery
 
-from base import BaseInterfacer, BaseInterfacerFactory, NamesInput, Primitives, register_interfacers
-
+from base import BaseInterfacer, BaseInterfacerFactory, NamesInput, Primitives
 VALIDATOR_REGISTRATIONS_FILE = 'validators/validators.json'
 VALIDATORS_CLASS_PREFIX = 'validators.'
 
@@ -206,5 +205,5 @@ class ProductValidator(BaseValidator):
 
 
 class ValidatorFactory(BaseInterfacerFactory):
-  _builders: Mapping[str, BaseValidator] = (register_interfacers(
-      VALIDATORS_CLASS_PREFIX, VALIDATOR_REGISTRATIONS_FILE))
+  VALIDATORS_CLASS_PREFIX = VALIDATORS_CLASS_PREFIX
+  VALIDATOR_REGISTRATIONS_FILE = VALIDATOR_REGISTRATIONS_FILE

@@ -20,6 +20,6 @@
  *  limitations under the License.
  */
 
-const CLOUD_FUNCTION_URI = 'https://validator-notarealurl.a.run.app';
-const TAXONOMY_CLOUD_PROJECT_ID = 'taxonomy-wizard-notreal';
+const CLOUD_FUNCTION_URI = 'https://validator-zuvicuro4q-uc.a.run.app';
+const TAXONOMY_CLOUD_PROJECT_ID = 'taxonomy-wizard-dev';
 const TAXONOMY_CLOUD_DATASET = 'taxonomy_wizard';

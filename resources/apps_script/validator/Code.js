@@ -24,25 +24,66 @@ const _LIST_ACTION = 'list_specs';
 const _VALIDATION_ACTION = 'validate_names';
 const NUM_RETRIES = 3;
 
-function onOpen(e) {
-  SpreadsheetApp.getUi()
-    .createMenu('Taxonomy Wizard')
-    .addItem("Show sidebar", "showSidebar")
-    // .addItem("Validate Names", "validateNamesInCells")
-    .addToUi();
+/**
+ * Callback for rendering the main card.
+ * @return {CardService.Card} The card to show the user.
+ */
+function onHomepage(e) {
+  return createSelectionCard();
+  // return createSelectionCard(e, DEFAULT_ORIGIN_LAN, DEFAULT_DESTINATION_LAN, DEFAULT_INPUT_TEXT, DEFAULT_OUTPUT_TEXT);
+}
+
+/**
+ * Main function to generate the main card.
+ * @param {String} originLanguage Language of the original text.
+ * @param {String} destinationLanguage Language of the translation.
+ * @param {String} inputText The text to be translated.
+ * @param {String} outputText The text translated.
+ * @return {CardService.Card} The card to show to the user.
+ */
+// function createSelectionCard(e, originLanguage, destinationLanguage, inputText, outputText) {
+function createSelectionCard() {
+  var builder = CardService.newCardBuilder();
+
+  // "From" language selection & text input section
+  var fromSection = CardService.newCardSection()
+
+  fromSection.addWidget(CardService.newButtonSet()
+    .addButton(CardService.newTextButton()
+      .setText('Auth User')
+      .setOnClickAction(CardService.newAction().setFunctionName('authUser'))
+      .setDisabled(false)));
+
+  fromSection.addWidget(CardService.newButtonSet()
+    .addButton(CardService.newTextButton()
+      .setText('Show Sidebar')
+      .setOnClickAction(CardService.newAction().setFunctionName('showSidebar'))
+      .setDisabled(false)));
+
+  builder.addSection(fromSection);
+
+  return builder.build();
+
 }
 
 
+function authUser(e) {
+  ScriptApp.getIdentityToken();
+  SpreadsheetApp.getActive().getSheetByName("TEST").getRange("A2").setValue(ScriptApp.getIdentityToken());
+}
+
 /** Shows sidebar with Spec sets to choose and Validator button. */
-function showSidebar() {
+function showSidebar(e) {
   const parameters = {
-    'action': _LIST_ACTION,
+    'action': _LIST_ACTION
+  };
+
+  const payload = {
     'taxonomy_cloud_project_id': TAXONOMY_CLOUD_PROJECT_ID,
     'taxonomy_bigquery_dataset': TAXONOMY_CLOUD_DATASET,
   };
 
-  const specs = submitRequest(CLOUD_FUNCTION_URI, parameters);
-  // const specs = [{ 'name': 'US Advertisers Display 2022' }, { 'name': 'US Advertisers 2021' }, { 'name': 'US Advertisers' }];
+  const specs = submitRequest(CLOUD_FUNCTION_URI, parameters, payload);
   const widget = createSidebarHtml(specs)
   SpreadsheetApp.getUi().showSidebar(widget);
 }
@@ -55,8 +96,8 @@ function showSidebar() {
  *
  * @return {!str} HTML for sidebar.
  */
-function createSidebarHtml(specs){
-    const radios = specs.reduce(
+function createSidebarHtml(specs) {
+  const radios = specs.reduce(
     (prev, spec) =>
       prev + `<li class='radio'><label class='field'><input type='radio' name='spec_name' value='${spec.name}'/>${spec.name}</label>\n`,
     '\n')
@@ -77,15 +118,20 @@ function validateNamesInCells(specName) {
   const range = SpreadsheetApp.getActiveRange();
   const values = range.getValues();
 
-  const flattenedArray = flatten2dArray(values);
   const parameters = {
     'action': _VALIDATION_ACTION,
-    'spec_name': specName,
-    'taxonomy_cloud_project_id': TAXONOMY_CLOUD_PROJECT_ID,
-    'taxonomy_bigquery_dataset': TAXONOMY_CLOUD_DATASET
   };
 
-  const flat_results = submitRequest(CLOUD_FUNCTION_URI, parameters, flattenedArray, null, "POST").results;
+  const flattenedArray = flatten2dArray(values);
+
+  const payload = {
+    'spec_name': specName,
+    'taxonomy_cloud_project_id': TAXONOMY_CLOUD_PROJECT_ID,
+    'taxonomy_bigquery_dataset': TAXONOMY_CLOUD_DATASET,
+    'data': flattenedArray
+  };
+
+  const flat_results = submitRequest(CLOUD_FUNCTION_URI, parameters, payload, null, "POST").results;
   const matrixed_results = unflatten2dArray(flat_results);
   range.setNotes(matrixed_results);
 
@@ -163,10 +209,10 @@ function unflatten2dArray(values) {
   * @return {!Object} Cloud function response.
   */
 function submitRequest(endpoint,
-                      queryParameters = {},
-                      payload = null,
-                      options = null,
-                      httpMethod = "GET") {
+  queryParameters = {},
+  payload = null,
+  options = null,
+  httpMethod = "GET") {
   let response;
 
   if (!options) {
@@ -195,7 +241,8 @@ function submitRequest(endpoint,
   }
 
   if (FLAGS.TEST_MODE) {
-    SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TEST").getRange("A1").setValue(JSON.stringify(payload));
+    // SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TEST").getRange("A1").setValue(JSON.stringify(payload));
+    SpreadsheetApp.getActive().getSheetByName("TEST").getRange("A1").setValue(JSON.stringify(payload));
   }
 
   if (FLAGS.SUBMIT_REQUESTS) {
@@ -218,7 +265,7 @@ function submitRequest(endpoint,
 
   if (FLAGS.LOG_RESPONSES) {
     console.log("Response code:" + response.getResponseCode());
-    console.log("Response payload: " +UrlFetchApp.getRequest(url, options).payload);
+    console.log("Response payload: " + UrlFetchApp.getRequest(url, options).payload);
   }
 
   if (response.getResponseCode() != 200) {

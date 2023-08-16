@@ -15,6 +15,7 @@
 """ Validates/update names submitted according to specified Taxonomy."""
 
 from collections.abc import Sequence
+from typing import Mapping
 import flask
 import os
 from google.cloud import bigquery
@@ -42,32 +43,39 @@ def handle_request(request: flask.Request):
       Successful start response or error response.
   """
   try:
-    action: str = request.args.get("action")
-    project_id: str = request.args.get("taxonomy_cloud_project_id")
-    dataset: str = request.args.get("taxonomy_bigquery_dataset")
+    action: str = request.args.get('action')
+    payload: Mapping[str:Sequence[NamesInput] | str] = request.get_json()
+    project_id: str = payload['taxonomy_cloud_project_id']
+    dataset: str = payload['taxonomy_bigquery_dataset']
 
     if action == 'list_specs':
       return list_specs(project_id, dataset)
     elif action == 'validate_everything':
       return validate_all_specs(project_id, dataset)
     elif action == 'validate_names':
-      spec_name: str = request.args.get("spec_name")
-      data: Sequence[NamesInput] = request.get_json()
+      spec_name: str = payload['spec_name']
+      data: Sequence[NamesInput] = payload['data']
       return validate_entity_values(spec_name, data, project_id, dataset)
     elif action == 'update_names':
-      spec_name: str = request.args.get("spec_name")
-      data: Sequence[NamesInput] = request.get_json()
+      spec_name: str = payload['spec_name']
+      data: Sequence[NamesInput] = payload['data']
       return update_entity_values(spec_name, data, project_id, dataset)
     else:
+      print('Value Error...')
       raise ValueError(
-          f'Invalid or missing value for parameter "action": {data["action"]}.')
+          f'Invalid (or missing) value for parameter "action": {action}.')
+  except KeyError as e:
+    err = f'Invocation failed. Missing key from payload: {str(e)}'
+    print(err)
+    return err, 400, None
   except Exception as e:
-    print(f"Invocation failed with error: {str(e)}")
-    return str(e), 400, None
+    err = f'Invocation failed with error: {str(e)}'
+    print(err)
+    return err, 400, None
 
 
 def list_specs(project_id: str, dataset: str) -> _ListSpecsResponseJson:
-  query: str = f"SELECT name FROM `{project_id}.{dataset}.specifications`\n"
+  query: str = f'SELECT name FROM `{project_id}.{dataset}.specifications`\n'
   rows = _bq_client.get().query(query).result()
   return [{'name': row['name']} for row in rows]
 
@@ -95,13 +103,13 @@ def validate_all_specs(project_id: str, dataset: str):
 
   persist_results(validation_results, project_id, dataset)
 
-  return "Successfully ran validation.", 200, None
+  return 'Successfully ran validation.', 200, None
 
 
 def get_specifications(project_id: str,
                        dataset: str,
-                       additional_fields: str = "",
-                       where_clause: str = "TRUE"):
+                       additional_fields: str = '',
+                       where_clause: str = 'TRUE'):
   client: bigquery.Client = _bq_client.get()
   query = 'SELECT\n'\
            '  name,\n'\
