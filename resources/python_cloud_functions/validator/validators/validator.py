@@ -56,6 +56,8 @@ class BaseValidator(BaseInterfacer):
     unique_values = self._extract_unique_values(data_to_validate)
 
     query_template: str = self._fetch_validation_query_template()
+    if not query_template:
+      raise ValueError(f'Could not retrieve spec with name "{self.spec_name}".')
     pp_query_template: str = self.post_process_query_template(query_template)
 
     validated_data = self.fetch_validation_results(pp_query_template,

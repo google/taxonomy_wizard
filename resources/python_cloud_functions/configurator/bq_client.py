@@ -41,6 +41,8 @@ class BqClient():
     if not scopes:
       scopes = self._DEFAULT_SCOPES
 
+      
+
     scopes.sort()
     uid: str = hashlib.md5(json.dumps(scopes).encode('utf-8')).hexdigest()
 

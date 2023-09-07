@@ -17,6 +17,7 @@
 
 PROJECT_ID=$(gcloud config get project 2>/dev/null)
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+REGION=us-central1
 
 gcloud iam service-accounts create taxonomy-wizard-validator \
   --description="Service account for Taxonomy Wizard Validator component." \
@@ -46,7 +47,7 @@ gcloud services enable run.googleapis.com
 
 gcloud functions deploy validator \
   --gen2 \
-  --region=us-central1 \
+  --region=$REGION \
   --runtime=python310 \
   --source=$SCRIPT_DIR \
   --entry-point=handle_request \
@@ -56,12 +57,12 @@ gcloud functions deploy validator \
   --ignore-file=.gcloudignore
 
 PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
-URI=$(gcloud functions describe validator --gen2 --format="value(serviceConfig.uri)" --region=us-central1)
+URI=$(gcloud functions describe validator --gen2 --format="value(serviceConfig.uri)" --region=$REGION)
 
 gcloud scheduler jobs create http validator-scheduler \
   --schedule="5 4 * * *" \
   --uri="${URI}/?action=validate_everything&taxonomy_cloud_project_id=${PROJECT_ID}&taxonomy_bigquery_dataset=taxonomy_wizard" \
-  --location="us-central1" \
+  --location="$REGION" \
   --http-method="GET" \
   --oidc-service-account-email="taxonomy-wizard-validator@${PROJECT_ID}.iam.gserviceaccount.com"
 # --uri="${URI}" \

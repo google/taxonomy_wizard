@@ -15,8 +15,12 @@
 
 var FLAGS = function() {};
 
-FLAGS.SHOW_HTTP_EXCEPTIONS = true;              // Show full HTTP exceptions.
-FLAGS.SUBMIT_REQUESTS = true                    // Submit Requests.
-FLAGS.LOG_REQUESTS = false;                     // Log requests (independent of request submission).
-FLAGS.LOG_RESPONSES = false;                    // Log responses (when SUBMIT_REQUESTS=true).
-FLAGS.TEST_MODE = false;                        // Set to true for test mode.
+// Logging
+FLAGS.LOG_REQUESTS = true;          // Log requests (independent of request submission).
+FLAGS.LOG_RESPONSES = true;         // Log responses (when SUBMIT_REQUESTS=true).
+
+// Debugging
+FLAGS.SHOW_HTTP_EXCEPTIONS = true;  // Show full HTTP exceptions.
+FLAGS.SUBMIT_REQUESTS = true        // Submit Requests.
+FLAGS.LOG_SHEET = "";              // If non-empty, will write test data to sheet specified.
+FLAGS.TEST_RESPONSE = false;        // When TEST_MODE=True and SUBMIT_REQUESTS=False, then use this to return the desired response.

@@ -46,8 +46,10 @@ class BaseInterfacer():
     _base_row_data (Mapping[str, Primitives]): Source of data to append to every
       row of output. (Must be a Mapping with at least all columns specified in
       `base_row_columns`.)
+    _access_token: str: Access token to run as a specific user, else uses
+      default service account.
   """
-  # Required instantiation parameters:
+  # Required:
   cloud_project: str = field(kw_only=True)
   bigquery_dataset: str = field(kw_only=True)
   bq_client: bigquery.Client = field(kw_only=True, default=BqClient().get())
@@ -56,7 +58,10 @@ class BaseInterfacer():
   response_field_name: str = field(default='response', kw_only=True)
   base_row_columns: Sequence[str] = field(factory=list, kw_only=True)
 
-  # Private attributes:
+  # Optional
+  _access_token: str = field(default='', kw_only=True)
+
+  # Private:
   _base_row: Mapping[str, Primitives] = field(init=False)
 
   def __attrs_post_init__(self):
@@ -119,13 +124,11 @@ class BaseInterfacerFactory():
       module = sys.modules[module_name]
       builders[k.upper()] = getattr(module, class_name)
 
-    return builders
+    self._builders = builders
 
-  @classmethod
   def register(cls, product: str, interfacer_class: type):
     cls._builders[product.upper()] = interfacer_class
 
-  @classmethod
   def get(cls, spec: Mapping[str, Primitives], project_id: str, dataset: str,
           bq_client: bigquery.Client, **kwargs) -> BaseInterfacer:
     """Returns an initialized Interfacer based on values in `spec`.

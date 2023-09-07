@@ -2,9 +2,9 @@
  * Description: Update the _CLOUD_FUNCTION_SUBDOMAIN value once it has been deployed.
  * Contributors: blevitan@
  * Last updated: 2022-09-09
- * 
+ *
  * @OnlyCurrentDoc
- * 
+ *
  *  Copyright 2022 Google LLC
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +20,6 @@
  *  limitations under the License.
  */
 
-const CLOUD_FUNCTION_URI = 'https://validator-zuvicuro4q-uc.a.run.app';
-const TAXONOMY_CLOUD_PROJECT_ID = 'taxonomy-wizard-dev';
+const CLOUD_FUNCTION_URI = 'https://notareal.url.com';
+const TAXONOMY_CLOUD_PROJECT_ID = 'taxonomy-wizard-notreal';
 const TAXONOMY_CLOUD_DATASET = 'taxonomy_wizard';
