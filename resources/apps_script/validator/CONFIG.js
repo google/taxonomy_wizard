@@ -2,9 +2,9 @@
  * Description: Update the _CLOUD_FUNCTION_SUBDOMAIN value once it has been deployed.
  * Contributors: blevitan@
  * Last updated: 2022-09-09
- * 
+ *
  * @OnlyCurrentDoc
- * 
+ *
  *  Copyright 2022 Google LLC
  *
  *  Licensed under the Apache License, Version 2.0 (the "License");

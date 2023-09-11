@@ -16,6 +16,7 @@
 # Deploy configurator
 PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+REGION=us-central1
 
 gcloud iam service-accounts create taxonomy-wizard-configurator \
   --description="Service account for Taxonomy Wizard Configurator component." \
@@ -42,7 +43,7 @@ gcloud services enable bigquery.googleapis.com
 
 gcloud functions deploy configurator \
   --gen2 \
-  --region=us-central1 \
+  --region=$REGION \
   --runtime=python310 \
   --source=$SCRIPT_DIR \
   --entry-point=handle_request \

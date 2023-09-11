@@ -17,11 +17,14 @@
     "https://www.googleapis.com/auth/script.container.ui",
     "https://www.googleapis.com/auth/cloud-platform",
     "https://www.googleapis.com/auth/drive",
+    "https://www.googleapis.com/auth/dfareporting",
+    "https://www.googleapis.com/auth/dfatrafficking",
+    "https://www.googleapis.com/auth/ddmconversions",
     "openid"
   ],
   "addOns": {
     "common": {
-      "name": "Taxonomy Wizard - Validator",
+      "name": "Taxonomy Wizard: Validator",
       "logoUrl": "https://cdn.pixabay.com/photo/2016/06/13/14/57/wizard-1454385_1280.png",
       "layoutProperties": {
         "primaryColor": "#2772ed"

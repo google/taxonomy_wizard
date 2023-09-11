@@ -16,11 +16,11 @@
 # Update validator script.
 
 PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
-
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
+REGION=us-central1
 
-URI=$(gcloud functions describe validator --gen2 --format="value(serviceConfig.uri)" --region=us-central1)
-
+# URI=$(gcloud functions describe validator --gen2 --format="value(serviceConfig.uri)" --region=$REGION)
+URI=https://${REGION}-${PROJECT_ID}.cloudfunctions.net/validator
 ESCAPED_URI=$(sed 's/[&/\]/\\&/g' <<<"$URI")
 
 sed -i \

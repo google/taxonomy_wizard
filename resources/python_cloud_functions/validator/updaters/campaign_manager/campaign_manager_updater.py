@@ -30,7 +30,7 @@ API_SCOPES = [
     'https://www.googleapis.com/auth/ddmconversions',
 ]
 
-# 60 queries/minute, per https://developers.google.com/doubleclick-advertisers/quotas
+# 60 qpm, per https://developers.google.com/doubleclick-advertisers/quotas
 CM_API_MAX_REQUESTS_PER_MINUTE = 60
 
 
@@ -73,8 +73,10 @@ class CampaignManagerUpdater(GoogleAPIClientUpdater):
     """
     if self.entity_type.upper() == 'CAMPAIGN':
       return self._service.campaigns()
-    if self.entity_type.upper() == 'AUDIENCE':
-      return self._service.campaigns()
+    if self.entity_type.upper() == 'PLACEMENT':
+      return self._service.placements()
+    if self.entity_type.upper() == 'REMARKETING LIST':
+      return self._service.remarketingLists()
     else:
       raise ValueError(
           f'Unsupported value for "entity_type" (aka "Taxonomy level"): "{self.entity_type}".'
@@ -83,9 +85,10 @@ class CampaignManagerUpdater(GoogleAPIClientUpdater):
 
 class CampaignManagerUpdaterBuilder(BaseInterfacerBuilder):
 
-  def __call__(self, spec: Mapping[str, Primitives],
-               updates: Sequence[NamesInput], project_id: str, dataset: str,
-               bq_client: bigquery.Client) -> CampaignManagerUpdater:
+  def __call__(self, spec: Mapping[str,
+                                   Primitives], updates: Sequence[NamesInput],
+               project_id: str, dataset: str, bq_client: bigquery.Client,
+               access_token: str) -> CampaignManagerUpdater:
     """Returns an initialized Updater based on values in `spec`.
 
     Args:
@@ -103,5 +106,6 @@ class CampaignManagerUpdaterBuilder(BaseInterfacerBuilder):
           bq_client=bq_client,
           entity_type=spec['entity_type'].upper(),
           customer_owner_id=spec['customer_owner_id'],
-          updates=updates)
+          updates=updates,
+          access_token=access_token)
     return self._instance

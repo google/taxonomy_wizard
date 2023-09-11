@@ -241,6 +241,7 @@ function submitRequest(endpoint,
     for (var n = 0; n < NUM_RETRIES; n++) {
       try {
         response = UrlFetchApp.fetch(url, options);
+        break;
       } catch (e) {
         if (n == NUM_RETRIES) {
           throw e;

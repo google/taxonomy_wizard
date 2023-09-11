@@ -20,6 +20,7 @@ from datetime import datetime
 from google import auth
 from googleapiclient import discovery, http
 from google.cloud import bigquery
+from httplib2 import Credentials
 
 from base import BaseInterfacerBuilder, NamesInput, Primitives
 from validators.validator import ProductValidator, ProductValidatorFilter
@@ -143,9 +144,23 @@ class CampaignManagerValidator(ProductValidator):
     return getattr(service, root_name)()
 
   def _build_service(self) -> discovery.Resource:
-    credentials, _ = auth.default(scopes=API_SCOPES)
-    service = discovery.build(API_NAME, API_VERSION, credentials=credentials)
-    return service
+    """"Builds the Google API service.
+
+    Creates credentials via `_access_token`, if provided. Otherwise, uses the
+    default account.
+
+    Returns:
+        discovery.Resource: Google API service.
+    """
+    if self._access_token:
+      credentials = Credentials(self._access_token)
+    else:
+      credentials = auth.default(scopes=self._API_SCOPES)[0]
+
+    return discovery.build(self._API_NAME,
+                           self._API_VERSION,
+                           credentials=credentials)
+
 
 
 class CampaignManagerValidatorBuilder(BaseInterfacerBuilder):

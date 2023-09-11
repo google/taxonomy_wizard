@@ -1,7 +1,7 @@
 /**
- * Description: Taxonomy Wizard Plugin
- * Contributors: blevitan@
- * Last updated: 2022-09-09
+ * Description: Taxonomy Wizard: Validator Plugin
+ * Contributors: blevitan@, djimbaye@
+ * Last updated: 2023-09-07
  * 
  * @OnlyCurrentDoc
  * 
@@ -22,6 +22,8 @@
 
 const _LIST_ACTION = 'list_specs';
 const _VALIDATION_ACTION = 'validate_names';
+const _UPDATE_ACTION = 'update_names'
+const _UPDATE_SUCCESS_RESPONSE_SUFFIX = 'Updated.'
 const NUM_RETRIES = 3;
 
 /**
@@ -29,51 +31,92 @@ const NUM_RETRIES = 3;
  * @return {CardService.Card} The card to show the user.
  */
 function onHomepage(e) {
-  return createSelectionCard();
-  // return createSelectionCard(e, DEFAULT_ORIGIN_LAN, DEFAULT_DESTINATION_LAN, DEFAULT_INPUT_TEXT, DEFAULT_OUTPUT_TEXT);
+  return buildSpecSelectorCard();
 }
 
 /**
- * Main function to generate the main card.
- * @param {String} originLanguage Language of the original text.
- * @param {String} destinationLanguage Language of the translation.
- * @param {String} inputText The text to be translated.
- * @param {String} outputText The text translated.
- * @return {CardService.Card} The card to show to the user.
+ * Builds the (context-free) homepage card.
  */
-// function createSelectionCard(e, originLanguage, destinationLanguage, inputText, outputText) {
-function createSelectionCard() {
-  var builder = CardService.newCardBuilder();
+function buildHomepageCard() {
+  const builder = CardService.newCardBuilder();
+  const section = CardService.newCardSection()
 
-  // "From" language selection & text input section
-  var fromSection = CardService.newCardSection()
+  builder.setHeader(CardService.newCardHeader().setTitle('Taxonomy Wizard'));
 
-  fromSection.addWidget(CardService.newButtonSet()
+  section.addWidget(CardService.newButtonSet()
     .addButton(CardService.newTextButton()
-      .setText('Auth User')
-      .setOnClickAction(CardService.newAction().setFunctionName('authUser'))
+      .setText('Load Taxonomy Spec Chooser')
+      .setOnClickAction(CardService.newAction().setFunctionName('loadSpecChooserCard'))
       .setDisabled(false)));
 
-  fromSection.addWidget(CardService.newButtonSet()
-    .addButton(CardService.newTextButton()
-      .setText('Show Sidebar')
-      .setOnClickAction(CardService.newAction().setFunctionName('showSidebar'))
-      .setDisabled(false)));
-
-  builder.addSection(fromSection);
-
+  builder.addSection(section);
   return builder.build();
-
 }
 
+/**
+ * Builds the Spec selector card.
+ * 
+ * @param {!Object} specToSelect (Optional) Name of spec to select, else first.
+ * @param (!Object) messageSection (Optional) messageSection to display.
+ *
+ */
+function buildSpecSelectorCard(specToSelect = '', messageSection = null) {
+  const builder = CardService.newCardBuilder()
+    .setHeader(CardService.newCardHeader().setTitle('Taxonomy Wizard'));
 
-function authUser(e) {
-  ScriptApp.getIdentityToken();
-  SpreadsheetApp.getActive().getSheetByName("TEST").getRange("A2").setValue(ScriptApp.getIdentityToken());
+  const mainSection = CardService.newCardSection();
+
+  const selector = CardService.newSelectionInput()
+    .setType(CardService.SelectionInputType.RADIO_BUTTON)
+    .setTitle('Choose Taxonomy Specification Set:')
+    .setFieldName('spec_name');
+
+  const specNames = getSpecNamesFromUserProperties();
+
+  if (specToSelect == '') {
+    specToSelect = specNames[0];
+  }
+  for (const specName of specNames) {
+    const isSelected = specName === specToSelect;
+    selector.addItem(specName, specName, isSelected);
+  }
+  mainSection.addWidget(selector);
+
+  mainSection.addWidget(CardService.newButtonSet()
+    .addButton(CardService.newTextButton()
+      .setText('Validate Selection')
+      .setOnClickAction(CardService.newAction().setFunctionName('validateNamesInCells'))
+      .setDisabled(false)));
+
+  mainSection.addWidget(CardService.newButtonSet()
+    .addButton(CardService.newTextButton()
+      .setText('Update Selection')
+      .setOnClickAction(CardService.newAction().setFunctionName('updateNamesInCells'))
+      .setDisabled(false)));
+
+  builder.addSection(mainSection);
+
+  if (messageSection) {
+    builder.addSection(messageSection);
+  }
+  return builder.build();
 }
 
-/** Shows sidebar with Spec sets to choose and Validator button. */
-function showSidebar(e) {
+/** Pops stack to root, adds `card`, and displays it.
+ * @param (!Object) card Card to add and display.
+*/
+function displayCardAboveRoot(card) {
+  const nav = CardService.newNavigation()
+    .popToRoot()
+    .pushCard(card);
+
+  return CardService.newActionResponseBuilder()
+    .setNavigation(nav)
+    .build();
+}
+
+/** Shows sidebar with Spec sets to choose and Validator & Update buttons. */
+function loadSpecChooserCard(e) {
   const parameters = {
     'action': _LIST_ACTION
   };
@@ -84,63 +127,163 @@ function showSidebar(e) {
   };
 
   const specs = submitRequest(CLOUD_FUNCTION_URI, parameters, payload);
-  const widget = createSidebarHtml(specs)
-  SpreadsheetApp.getUi().showSidebar(widget);
+  storeSpecNamesAsUserProperties(specs);
+
+  const specCard = buildSpecSelectorCard();
+  return displayCardAboveRoot(specCard);
+}
+
+
+function storeSpecNamesAsUserProperties(specs) {
+  const userProperties = PropertiesService.getUserProperties();
+
+  let i = 0;
+  for (const spec of specs) {
+    userProperties.setProperty(`specName${i}`, spec.name);
+    i++;
+  }
+
+  userProperties.setProperty('specName_count', i.toString());
+}
+
+function getSpecNamesFromUserProperties() {
+  const userProperties = PropertiesService.getUserProperties();
+  let specNames = [];
+
+  let specNameCount = userProperties.getProperty('specName_count');
+  for (let i = 0; i < specNameCount; i++) {
+    specNames.push(userProperties.getProperty(`specName${i}`));
+  }
+
+  return specNames;
 }
 
 
 /**
- * Generates HTML for sidebar.
+ * Validates the names in the sheet selection against the spec set passed in `e`.
  *
- * @param {!Object} Array of spec names.
- *
- * @return {!str} HTML for sidebar.
+ * @param {!Object} e Event (containing spec name).
  */
-function createSidebarHtml(specs) {
-  const radios = specs.reduce(
-    (prev, spec) =>
-      prev + `<li class='radio'><label class='field'><input type='radio' name='spec_name' value='${spec.name}'/>${spec.name}</label>\n`,
-    '\n')
-    // TODO: Replace with more durable HTML method.
-    .replace(`value='${specs[0].name}'`, `value='${specs[0].name}' checked`);
-
-  return HtmlService.createHtmlOutput(SIDEBAR_HTML_PRE + radios + SIDEBAR_HTML_POST).setTitle('Taxonomy Wizard');
-
-}
-
-
-/**
- * Validates the names in the sheet selection against the spec set chosen in the sidebar.
- *
- * @param {!str} Name of spec to validate sheet selection against.
- */
-function validateNamesInCells(specName) {
+function validateNamesInCells(e) {
+  const specName = e.formInput.spec_name;
   const range = SpreadsheetApp.getActiveRange();
-  const values = range.getValues();
 
-  const parameters = {
-    'action': _VALIDATION_ACTION,
-  };
+  const dict = validationDataToDict(range.getValues());
 
-  const flattenedArray = flatten2dArray(values);
-
+  const parameters = { 'action': _VALIDATION_ACTION };
   const payload = {
     'spec_name': specName,
     'taxonomy_cloud_project_id': TAXONOMY_CLOUD_PROJECT_ID,
     'taxonomy_bigquery_dataset': TAXONOMY_CLOUD_DATASET,
-    'data': flattenedArray
+    'data': dict
   };
+  const flat_results = submitRequest(CLOUD_FUNCTION_URI, parameters, payload, null, 'POST').results;
 
-  const flat_results = submitRequest(CLOUD_FUNCTION_URI, parameters, payload, null, "POST").results;
-  const matrixed_results = unflatten2dArray(flat_results);
-  range.setNotes(matrixed_results);
+  const matrixed_results = unflatten2dArray(flat_results, 'validation_message');
+
+  const failure_test = (t) => t !== '';
+  outputResponse(matrixed_results, range, failure_test);
+
+  const failureSection = formatFailureMessages(flat_results, 'value', 'validation_message', failure_test, 'Validation completed');
+  return buildSpecSelectorCard(specName, failureSection);
+}
+
+
+/**
+ * Updates the names in the sheet selection against the spec set passed in `e`.
+ *
+ * @param {!Object} e Event (containing spec name).
+ */
+function updateNamesInCells(e) {
+  const specName = e.formInput.spec_name;
+  const range = SpreadsheetApp.getActiveRange();
+
+  if (!checkUpdateRange(range)) {
+    let messageSection = CardService.newCardSection()
+      .addWidget(CardService.newTextParagraph()
+        .setText('<b><font color="#FF0000">Selection nust have exactly 2 columns AND all values in first column (key) must be integers.</font></b>'));
+
+    return buildSpecSelectorCard(specName, messageSection);
+  }
+
+  const dict = updaterDataToDict(range.getValues());
+
+  const parameters = { 'action': _UPDATE_ACTION };
+  const payload = {
+    'spec_name': specName,
+    'taxonomy_cloud_project_id': TAXONOMY_CLOUD_PROJECT_ID,
+    'taxonomy_bigquery_dataset': TAXONOMY_CLOUD_DATASET,
+    'data': dict,
+    'access_token': ScriptApp.getOAuthToken()
+  };
+  const flat_results = submitRequest(CLOUD_FUNCTION_URI, parameters, payload, null, 'POST').results;
+
+  const matrixed_results = unflatten2dArray(flat_results, 'response');
+  let response_range = range.offset(0, 1, range.getNumRows(), 1);
+
+  const failure_test = (rs) => rs !== _UPDATE_SUCCESS_RESPONSE_SUFFIX
+  const failures = outputResponse(matrixed_results, response_range, failure_test);
+
+
+  const failureSection = formatFailureMessages(flat_results, 'key', 'response', failure_test, 'Update completed');
+  return buildSpecSelectorCard(specName, failureSection);
+}
+
+
+function checkUpdateRange(range) {
+  // Must have exactly 2 columns AND all values in first column (key) must be integers.
+  return (range.getNumColumns() == 2) && (!range.offset(0, 0, range.getNumRows(), 1).getValues().some((row) => !Number.isInteger(row[0])));
+}
+
+
+function formatFailureMessages(results, id_field_name, response_field_name, failure_test, header_message_start) {
+  let section = CardService.newCardSection();
+  let widgets = [];
+
+
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    if (failure_test(result[response_field_name])) {
+      widgets.push(CardService.newDecoratedText()
+        .setText(`<b><font color="#770000">${result[id_field_name]}</font></b><br><font color="#000000">${result[response_field_name]}</font></br>`)
+        .setWrapText(true));
+    }
+  }
+
+  if (widgets.length > 0) {
+    section.setHeader(`${header_message_start} with ${widgets.length} failure(s):`);
+  }
+  else {
+    section.addWidget(CardService.newDecoratedText()
+        .setText(`<font color="#007700">${`${header_message_start} successfully.`}</font></br>`)
+        .setWrapText(true));
+  }
+
+  for (let i = 0; i < widgets.length; i++) {
+    section.addWidget(widgets[i]);
+  }
+
+  return section
+}
+
+
+/**
+ * Formats response and adds notes as needed.
+ * @param (!Object) notes List of notes.
+ * @param (!Object) range Range to apply notes to.
+ * @param (!Object) failure_test Function to test whether to format the cell red.
+ * 
+ * @returns (!Object) Array containing failures.
+ */
+function outputResponse(notes, range, failure_test) {
+  range.setNotes(notes);
 
   for (let r = 0; r < range.getNumRows(); r++) {
     for (let c = 0; c < range.getNumColumns(); c++) {
-      if (matrixed_results[r][c] === null) {
-        range.getCell(r + 1, c + 1).setBackground(null);
-      } else {
+      if (failure_test(notes[r][c])) {
         range.getCell(r + 1, c + 1).setBackgroundRGB(255, 0, 0);
+      } else {
+        range.getCell(r + 1, c + 1).setBackground(null);
       }
     }
   }
@@ -154,12 +297,12 @@ function validateNamesInCells(specName) {
  *
  * @return {!Object} 1d array with elements of {value, row, column}.
  */
-function flatten2dArray(values) {
+function validationDataToDict(values) {
   let output = [];
 
   for (let r = 0; r < values.length; r++) {
     for (let c = 0; c < values[r].length; c++) {
-      output.push({ 'value': values[r][c], 'row': r, 'column': c });
+      output.push({ 'value': values[r][c].toString(), 'row': r, 'column': c });
     }
   }
 
@@ -168,15 +311,31 @@ function flatten2dArray(values) {
 
 
 /**
+ * Flattens the 2d array into a dict with elements of {row, key, new_value}.
+ *
+ * @param {!Object} values 2d array.
+ *
+ * @return {!Object} 1d array with elements of {row, key, value}.
+ */
+function updaterDataToDict(values) {
+  let output = [];
+
+  for (let r = 0; r < values.length; r++) {
+    output.push({ 'row': r, 'key': values[r][0].toString(), 'new_value': values[r][1].toString() });
+  }
+
+  return output;
+}
+
+/**
  * Unflattens the 1d array with elements of {value, row, column} into a 2d array.
  *
  * @param {!Object} values 1d array with elements of {value, row, column}.
- * @param {!int} rows Number of rows.
- * @param {!int} columns Number of columns.
+ * @param {!str} response_field_name Name of response field.
  *
  * @return {!Object} Values 2d array.
  */
-function unflatten2dArray(values) {
+function unflatten2dArray(values, response_field_name) {
   let output = [];
 
   for (let i = 0; i < values.length; i++) {
@@ -185,10 +344,13 @@ function unflatten2dArray(values) {
     if (output[row] === undefined) {
       output[row] = [];
     }
-    if (values[i].validation_message === '') {
-      output[row][values[i].column] = null;
+
+    let col = values[i]['column'] !== undefined ? values[i].column : '0';
+
+    if (values[i][response_field_name] === '') {
+      output[row][col] = '';
     } else {
-      output[row][values[i].column] = values[i].validation_message;
+      output[row][col] = values[i][response_field_name];
     }
   }
 
@@ -212,7 +374,7 @@ function submitRequest(endpoint,
   queryParameters = {},
   payload = null,
   options = null,
-  httpMethod = "GET") {
+  httpMethod = 'GET') {
   let response;
 
   if (!options) {
@@ -230,26 +392,32 @@ function submitRequest(endpoint,
   const url = endpoint + (!endpoint.endsWith('?') ? '?' : '') + objectToQueryParams(queryParameters);
 
   options.method = httpMethod;
-  options.headers['Content-Type'] = "application/json";
+  options.headers['Content-Type'] = 'application/json';
   options.muteHttpExceptions = FLAGS.SHOW_HTTP_EXCEPTIONS;
-  options.headers['Authorization'] = "Bearer " + ScriptApp.getIdentityToken();
+  options.headers['Authorization'] = 'Bearer ' + ScriptApp.getIdentityToken();
 
   if (FLAGS.LOG_REQUESTS) {
-    console.log("Request URL: " + url);
-    console.log("Request Options: " + JSON.stringify(options));
-    console.log("Request Payload:" + UrlFetchApp.getRequest(url, options).payload);
+    console.log('Request URL: ' + url);
+    console.log('Request Options: ' + JSON.stringify(options));
+    console.log('Request Payload:' + UrlFetchApp.getRequest(url, options).payload);
   }
 
-  if (FLAGS.TEST_MODE) {
-    // SpreadsheetApp.getActiveSpreadsheet().getSheetByName("TEST").getRange("A1").setValue(JSON.stringify(payload));
-    SpreadsheetApp.getActive().getSheetByName("TEST").getRange("A1").setValue(JSON.stringify(payload));
+  if (FLAGS.LOG_SHEET != '' && SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TEST') !== null) {
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TEST').getRange('A1').setValue(JSON.stringify(payload));
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TEST').getRange('A2').setValue(options.headers['Authorization']);
+    SpreadsheetApp.getActiveSpreadsheet().getSheetByName('TEST').getRange('A3').setValue('BOOP!');
   }
+
+  console.log('Request URL: ' + url);
+  console.log('Request Options: ' + JSON.stringify(options));
+  console.log('Request Payload:' + UrlFetchApp.getRequest(url, options).payload);
 
   if (FLAGS.SUBMIT_REQUESTS) {
     //exponential backoff
     for (var n = 0; n < NUM_RETRIES; n++) {
       try {
         response = UrlFetchApp.fetch(url, options);
+        break;
       } catch (e) {
         if (n == NUM_RETRIES) {
           throw e;
@@ -257,19 +425,21 @@ function submitRequest(endpoint,
         Utilities.sleep((Math.pow(2, n) * 1000) + (Math.round(Math.random() * 1000)));
       }
     }
-  } else if (FLAGS.TEST_MODE) {
-    return TEST_RESPONSE;
+
+    if (FLAGS.LOG_RESPONSES) {
+      console.log('Response code:' + response.getResponseCode());
+      console.log('Response payload: ' + UrlFetchApp.getRequest(url, options).payload);
+    }
+
+  } else if (FLAGS.TEST_RESPONSE) {
+    return FLAGS.TEST_RESPONSE;
   } else {
     return { 'status': 200, 'content': 'Ok' };
   }
 
-  if (FLAGS.LOG_RESPONSES) {
-    console.log("Response code:" + response.getResponseCode());
-    console.log("Response payload: " + UrlFetchApp.getRequest(url, options).payload);
-  }
 
   if (response.getResponseCode() != 200) {
-    var err = "Error with request. Response Code " + response.getResponseCode() + ": " + response.getContentText();
+    var err = 'Error with request. Response Code ' + response.getResponseCode() + ': ' + response.getContentText();
     console.error(err);
     throw err
   }

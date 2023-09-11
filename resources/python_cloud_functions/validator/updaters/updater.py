@@ -16,15 +16,19 @@
 from abc import abstractmethod
 from attrs import define, field
 from datetime import datetime, timedelta
+import logging
 import time
 from typing import Any, Dict, Mapping, MutableSequence, Sequence
 
 from google import auth
 from google.cloud import bigquery
+from google.oauth2.credentials import Credentials
 from googleapiclient import discovery
-from googleapiclient.http import BatchHttpRequest
+from googleapiclient.http import BatchHttpRequest, HttpRequest
 
 from base import BaseInterfacer, BaseInterfacerBuilder, BaseInterfacerFactory, NamesInput, Primitives
+
+NOT_FOUND_ERROR_CODE = 404
 
 DEFAULT_MAX_TRIES = 3
 DEFAULT_MAX_REQUESTS_PER_MINUTE = 60
@@ -33,7 +37,7 @@ BATCH_SIZE_LIMIT = 150
 UPDATER_REGISTRATIONS_FILE = 'updaters/updaters.json'
 UPDATERS_CLASS_PREFIX = 'updaters.'
 
-UpdateQueue = dict[str, NamesInput]
+RequestQueue = dict[str, HttpRequest]
 
 
 @define(auto_attribs=True)
@@ -69,12 +73,15 @@ class BaseUpdater(BaseInterfacer):
 class GoogleAPIClientUpdater(BaseUpdater):
   """Base class for Google API Client-based updaters for advertising products.
 
-  To be used, this class must be subclassed with methods `get_entity_resource`
-  and `generate_update_request` implemented.
+  Subclasses must implement `get_entity_resource()` and
+  `generate_update_request()`.
 
   An 'updater' provides the means to update list of values based on their keys.
   E.g., Update a list of campaign names to new names (based on either their old
   names or their ids).
+
+  This class performs the first update try in batch mode (asynchronously) and
+  subsequent tries synchronously.
 
   Attributes:
     entity_type (str): Type of entity being updated. (E.g., 'Campaign'.)
@@ -106,12 +113,12 @@ class GoogleAPIClientUpdater(BaseUpdater):
   _MAX_REQUESTS_PER_MINUTE: int = field(init=False, default=BATCH_SIZE_LIMIT)
 
   # Private:
-  _in_progress: UpdateQueue = field(init=False)
   _batch_requester: BatchHttpRequest = field(init=False)
   _next_batch_execution_time: datetime = field(init=False,
                                                default=datetime(1, 1, 1))
   _num_tries: int = field(init=False, default=1)
-  _pending: UpdateQueue = field(init=False)
+  _in_progress: RequestQueue = field(init=False, factory=dict)
+  _pending: RequestQueue = field(init=False, factory=dict)
   _pending_pops: MutableSequence[NamesInput] = field(init=False, factory=list)
   _results: Mapping[str, str | Exception] = field(init=False, factory=dict)
 
@@ -120,7 +127,6 @@ class GoogleAPIClientUpdater(BaseUpdater):
       self._MAX_BATCH_SIZE = BATCH_SIZE_LIMIT
 
     super().__attrs_post_init__()
-
 
   @abstractmethod
   def generate_update_request(self, entity_resource: discovery.Resource,
@@ -148,13 +154,13 @@ class GoogleAPIClientUpdater(BaseUpdater):
     """
     pass
 
-  def apply_updates(self):
+  def apply_updates(self) -> Sequence[NamesInput]:
     """ Updates underlying product's entities with matching keys in `updates`.
 
     Returns:
-        Results of updates.
+        Sequence[NamesInput]: Results of updates.
     """
-    in_progress = self._init_update()
+    self._init_update()
     self._perform_updates()
     responses = self.merge_input_and_output(self.updates, self._results)
     return responses
@@ -163,61 +169,48 @@ class GoogleAPIClientUpdater(BaseUpdater):
     """Inits the Updater and returns the current queue."""
     if not self._service:
       self._service = self._build_service()
-    self._in_progress = UpdateQueue()
     self._batch_requester = self._service.new_batch_http_request()
-    self._pending = {update['key']: update for update in self.updates}
+    entity_resource = self.get_entity_resource()
+    for update in self.updates:
+      self._pending[update['key']] = self.generate_update_request(
+          entity_resource, update)
 
   def _perform_updates(self):
-    """Performs the update, retrying failed requests as needed,
-    """
-    entity_resource = self.get_entity_resource()
-
+    """Performs the update, retrying failed requests."""
     while self._num_tries <= self._MAX_TRIES:
       if len(self._in_progress) == 0:
         self._num_tries += 1
-        self._batch_execute_updates(entity_resource)
-
+        self._batch_execute_updates()
       # need to do this in the main thread to inadvertently modifying `pending`
       # while we are iterating through its values.
       [self._pending.pop(k) for k in self._pending_pops]
       self._pending_pops.clear()
 
-  def _batch_execute_updates(self, entity_resource: discovery.Resource):
-    """Batches updates and executes batches as needed.
-
-    Args:
-        entity_resource (discovery.Resource): Service entity resource:
-          (e.g., service.campaigns(), service.creatives(), etc...)
-    """
-    for update in self._pending.values():
-      self._handle_batching(update, entity_resource, self._update_callback)
-
+  def _batch_execute_updates(self):
+    """Batches updates and executes batches as needed."""
+    [self._handle_batching(key) for key in self._pending]
+    #TODO(blevitan): Confirm `_batch_requester._requests` clears after batch execution.
     if self._batch_requester._requests:
-      self._run_batch()
+      self._execute_batch()
 
-  def _handle_batching(self, update: NamesInput,
-                       entity_resource: discovery.Resource, callback):
+  def _handle_batching(self, key: str):
     """Handles batching of runs for requests.
 
       Will add to batch and call `run_batch` if the batch is full.
 
     Args:
-        update (UpdatableEntity): Entity update to be made.
-        entity_resource (discovery.Resource): Service entity resource:
-          (e.g., service.campaigns(), service.creatives(), etc...)
-        callback (function): Callback function after `request` is executed.
+        key (str): Unique id to get update request from `_pending`.
     """
-
-    request = self.generate_update_request(entity_resource, update)
-    self._in_progress[update['key']] = update
+    request: HttpRequest = self._pending[key]
+    self._in_progress[key] = request
     self._batch_requester.add(request,
-                              request_id=update['key'],
-                              callback=callback)
+                              request_id=key,
+                              callback=self._update_callback)
 
     if len(self._batch_requester._requests) == self._MAX_BATCH_SIZE:
-      self._run_batch()
+      self._execute_batch()
 
-  def _run_batch(self):
+  def _execute_batch(self):
     """Runs batch (accounting for throttle-rate) if there is anything to run."""
 
     if (self._batch_requester._requests):
@@ -230,7 +223,7 @@ class GoogleAPIClientUpdater(BaseUpdater):
         timedelta(60 * batch_size // self._MAX_REQUESTS_PER_MINUTE)
       self._batch_requester = self._service.new_batch_http_request()
 
-  def _update_callback(self, request_id: str, _, exception: Exception):
+  def _update_callback(self, request_id: str, _, error: Exception):
     """Callback function after patch command.
 
     Handles success (remove from queue) or failure (or add to retry queue if
@@ -238,39 +231,57 @@ class GoogleAPIClientUpdater(BaseUpdater):
 
     Args:
         request_id (str): Unique id of original request.
-        _: (Not used.) Response from server.
-        exception (Exception): Exception returned from server (if any).
+        _ (HttpResponse): [Not used] Response from server.
+        error (Exception): Exception returned from server (if any).
     """
-    if exception:
-      self._handle_failed_updates(request_id, exception)
+    if error:
+      self._results[request_id] = self._handle_failed_update(request_id, error)
     else:
-      # need to do defer `_pending.pop()` to the main thread to avoid modifying
-      # `_pending` while we are iterating through its values.
-      self._pending_pops.append(request_id)
+      self._results[request_id] = 'Updated.'
+    # defer `_pending.pop()` to the main thread to avoid modifying `_pending`
+    # while we are iterating through its values (will cause GIL failure).
+    self._pending_pops.append(request_id)
     self._in_progress.pop(request_id)
-    self._results[request_id] = f'Updated.'
 
-  def _handle_failed_updates(self, request_id: str, exception: Exception):
-    """Handles failed patch requests.
+  def _handle_failed_update(self, request_id: str, error: Exception) -> str:
+    """Handles failed patch requests. Retries and return results message.
 
     Args:
         request_id (str): Unique id of original request.
         exception (Exception): Exception returned from server (if any).
     """
-    if self._num_tries == self._MAX_TRIES:
-      self._results[request_id] = f'Update failed: {exception}'
+    err_msg = f'Update failed: [{error.status_code}] {error.reason}'
+    if (self._num_tries == self._MAX_TRIES or
+        error.status_code == NOT_FOUND_ERROR_CODE):
+      logging.warning(f'Request {request_id} failed: {err_msg}')
+      return err_msg
+    else:
+      logging.info(f'Request {request_id} failed: {err_msg} ...will retry.')
+      # TODO(blevitan): Add in retry logic (exponential backoff?)
+      try:
+        self._pending(request_id).execute()
+        return 'Updated.'
+      except Exception as e:
+        logging.warning(f'Request {request_id} failed: {err_msg}')
+        return err_msg
 
   def _build_service(self) -> discovery.Resource:
-    """Builds the Google API service.
+    """"Builds the Google API service.
+
+    Creates credentials via `_access_token`, if provided. Otherwise, uses the
+    default account.
 
     Returns:
         discovery.Resource: Google API service.
     """
-    credentials, _ = auth.default(scopes=self._API_SCOPES)
-    service = discovery.build(self._API_NAME,
-                              self._API_VERSION,
-                              credentials=credentials)
-    return service
+    if self._access_token:
+      credentials = Credentials(self._access_token)
+    else:
+      credentials = auth.default(scopes=self._API_SCOPES)[0]
+
+    return discovery.build(self._API_NAME,
+                           self._API_VERSION,
+                           credentials=credentials)
 
 
 class UpdaterFactory(BaseInterfacerFactory):

@@ -15,15 +15,16 @@
 """ Validates/update names submitted according to specified Taxonomy."""
 
 from collections.abc import Sequence
-from typing import Mapping
 import flask
-import os
+import logging
+from typing import Mapping
+
 from google.cloud import bigquery
-from updaters.updater import BaseUpdater, GoogleAPIClientUpdater, UpdaterFactory
+
 from base import NamesInput
-from validators.validator import BaseValidator, RawJsonValidator, ProductValidator
 import bq_client
-from validators.validator import ValidatorFactory
+from updaters.updater import BaseUpdater, UpdaterFactory
+from validators.validator import ProductValidator, RawJsonValidator, ValidatorFactory
 
 _ListSpecsResponseJson = Sequence[dict[str, str]]
 _ValidateNamesResponseJson = dict[str, Sequence[NamesInput]]
@@ -59,18 +60,15 @@ def handle_request(request: flask.Request):
     elif action == 'update_names':
       spec_name: str = payload['spec_name']
       data: Sequence[NamesInput] = payload['data']
-      return update_entity_values(spec_name, data, project_id, dataset)
+      access_token: str = payload['access_token']
+      return update_entity_values(spec_name, data, project_id, dataset,
+                                  access_token)
     else:
-      print('Value Error...')
       raise ValueError(
           f'Invalid (or missing) value for parameter "action": {action}.')
-  except KeyError as e:
-    err = f'Invocation failed. Missing key from payload: {str(e)}'
-    print(err)
-    return err, 400, None
   except Exception as e:
     err = f'Invocation failed with error: {str(e)}'
-    print(err)
+    logging.error(err)
     return err, 400, None
 
 
@@ -93,7 +91,7 @@ def validate_all_specs(project_id: str, dataset: str):
 
   validation_results = []
   for spec in specs:
-    validator: ProductValidator = ValidatorFactory.get(
+    validator: ProductValidator = ValidatorFactory().get(
         spec=spec,
         project_id=project_id,
         dataset=dataset,
@@ -149,9 +147,12 @@ def persist_results(data: list[dict[str, str]], project_id, dataset):
   errors = job.result().errors
 
   if errors:
-    print(f'Errors adding rows to table: {errors}')
+    err = f'Errors adding rows to table: {errors}'
+    logging.error(err)
+    raise Exception(err)
   else:
-    print(f'Added {len(data)} row{"s" if len(data)!=1 else ""} to table.')
+    logging.info(
+        f'Added {len(data)} row{"s" if len(data)!=1 else ""} to table.')
 
 
 def validate_entity_values(spec_name: str, values: Sequence[NamesInput],
@@ -170,19 +171,20 @@ def validate_entity_values(spec_name: str, values: Sequence[NamesInput],
 
 
 def update_entity_values(spec_name: str, updates: Sequence[NamesInput],
-                         project_id: str,
-                         dataset: str) -> _ValidateNamesResponseJson:
+                         project_id: str, dataset: str,
+                         access_token: str) -> _ValidateNamesResponseJson:
 
   escaped_spec_name = spec_name.replace("'", "\\'")
   where_clause = f"name = '{escaped_spec_name}'"
   spec = next(get_specifications(project_id, dataset,
                                  where_clause=where_clause))
 
-  updater: BaseUpdater = UpdaterFactory.get(spec=spec,
-                                            updates=updates,
-                                            project_id=project_id,
-                                            dataset=dataset,
-                                            bq_client=_bq_client.get())
+  updater: BaseUpdater = UpdaterFactory().get(spec=spec,
+                                              updates=updates,
+                                              project_id=project_id,
+                                              dataset=dataset,
+                                              bq_client=_bq_client.get(),
+                                              access_token=access_token)
   results = updater.apply_updates()
 
   return {'results': results}
