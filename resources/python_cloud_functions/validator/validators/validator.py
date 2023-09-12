@@ -172,10 +172,13 @@ class RawJsonValidator(BaseValidator):
 class ProductValidatorFilter():
   """Filters for getting entities from advertising product-based validators.
 
+  Note: Not all attributes are used by all entities.
+
   Attributes:
     customer_owner_id (str): Profile id for CM, account id for DV360, etc...
     advertiser_ids (Sequence[str | int]): List of advertiser ids.
     campaign_ids (Sequence[str | int]): List of campaign ids.
+    floodlightActivityId (str): Floodlight activity id.
     min_start_date (datetime): Min start date.
     max_start_date (datetime): Max start date.
     min_end_date (datetime): Min end date.

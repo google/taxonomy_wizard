@@ -56,12 +56,8 @@ echo "████████████████████████�
 ██                                                                     ██
 ██                        ADMIN BACKEND DEPLOYED                       ██
 ██                                                                     ██
-██  Make sure you move the Configurator sheet's Apps Script to the     ██
-██  same project you deployed to.                                      ██
-██                                                                     ██
-██  You may need to configure the OAuth Consent screen as well:        ██
-██    User Type: Internal.                                             ██
-██    Enter App name (e.g., 'Taxonomy Wizard').                        ██
-██    Enter Support and Contact email address (e.g., your email).      ██
 █████████████████████████████████████████████████████████████████████████
+
 "
+
+./manual_steps.sh

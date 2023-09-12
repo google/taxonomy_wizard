@@ -40,7 +40,8 @@ class CampaignManagerValidator(ProductValidator):
 
   def fetch_data_to_validate(self) -> Sequence[str]:
     """ Fetches the data to validate based on the object properties."""
-    if self.entity_type == 'Campaign':
+    entity_type: str = self.entity_type.upper()
+    if entity_type == 'CAMPAIGN':
       return self._fetch_entity_values(
           root="campaigns",
           fields="id, name, startDate, endDate",
@@ -49,7 +50,7 @@ class CampaignManagerValidator(ProductValidator):
               'archived': False
           },
           filter_function=self._filter_campaign_row)
-    elif self.entity_type == 'Placement':
+    elif entity_type == 'PLACEMENT':
       return self._fetch_entity_values(
           root="placements",
           fields="id, name",
@@ -62,6 +63,15 @@ class CampaignManagerValidator(ProductValidator):
               'maxEndDate': self.filter.max_end_date,
           },
           filter_function=self._filter_placement_row)
+    elif entity_type == 'REMARKETING LIST':
+      return self._fetch_entity_values(
+          root="remarketingLists",
+          fields="id, name",
+          request_params={
+              'advertiserIds': self.filter.advertiser_ids,
+              'floodlightActivityId': self.filter.floodlightActivityId,
+          },
+          filter_function=self._filter_remarketinglist_row)
     else:
       raise ValueError(
           f'Unsupported value for "entity_type" (aka "Taxonomy level"): "{self.entity_type}".'

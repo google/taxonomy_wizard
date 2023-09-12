@@ -78,5 +78,5 @@ if [ ${configure_plugin}  = true ]; then
 fi
 
 if [ ${install_configuration} = true ]; then
-  /$SCRIPT_DIR/resources/apps_script/configurator/show_manual_inputs.sh
+  /$SCRIPT_DIR/resources/apps_script/configurator/manual_steps.sh
 fi
