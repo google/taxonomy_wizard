@@ -40,6 +40,6 @@ rsa==4.9
 six==1.16.0
 tomli==2.0.1
 uritemplate==4.1.1
-urllib3==1.26.12
+urllib3==1.26.18
 Werkzeug==2.2.2
 yapf==0.32.0
