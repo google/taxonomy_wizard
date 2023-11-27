@@ -13,6 +13,7 @@
 # limitations under the License.
 """ Campaign Manager validator. """
 
+from attr import field
 from attrs import define
 from typing import Any, Mapping, Sequence
 from datetime import datetime
@@ -37,10 +38,14 @@ _BQ_DATE_FORMAT = '%Y-%m-%d'
 
 @define(auto_attribs=True)
 class CampaignManagerValidator(ProductValidator):
+  _API_NAME: str = field(init=False, default=API_NAME)
+  _API_VERSION: str = field(init=False, default=API_VERSION)
+  _API_SCOPES: Sequence[str] = field(init=False, default=API_SCOPES)
 
   def fetch_data_to_validate(self) -> Sequence[str]:
     """ Fetches the data to validate based on the object properties."""
-    if self.entity_type == 'Campaign':
+    entity_type: str = self.entity_type.upper()
+    if entity_type == 'CAMPAIGN':
       return self._fetch_entity_values(
           root="campaigns",
           fields="id, name, startDate, endDate",
@@ -49,23 +54,60 @@ class CampaignManagerValidator(ProductValidator):
               'archived': False
           },
           filter_function=self._filter_campaign_row)
-    elif self.entity_type == 'Placement':
+
+    elif entity_type == 'PLACEMENT':
       return self._fetch_entity_values(
           root="placements",
           fields="id, name",
           request_params={
               'advertiserIds': self.filter.advertiser_ids,
               'campaignIds': self.filter.campaign_ids,
+              'floodlightActivityIds': self.filter.floodlight_activity_ids,
               'minStartDate': self.filter.min_start_date,
               'maxStartDate': self.filter.max_start_date,
               'minEndDate': self.filter.min_end_date,
               'maxEndDate': self.filter.max_end_date,
           },
-          filter_function=self._filter_placement_row)
+          filter_function=self._no_filter)
+
+    elif entity_type == 'REMARKETING LIST':
+      return self._fetch_remarketing_lists_for_advertisers()
+
     else:
       raise ValueError(
           f'Unsupported value for "entity_type" (aka "Taxonomy level"): "{self.entity_type}".'
       )
+
+  def _fetch_remarketing_lists_for_advertisers(self) -> Sequence[NamesInput]:
+    output: Sequence[NamesInput] = list()
+
+    for adv_id in self.filter.advertiser_ids:
+      if self.filter.floodlight_activity_ids:
+        output.extend(self._fetch_remarketing_lists_for_floodlights(adv_id))
+      else:
+        output.extend(
+            self._fetch_entity_values(root="remarketingLists",
+                                      fields="id, name",
+                                      request_params={'advertiserId': adv_id},
+                                      filter_function=self._no_filter))
+
+    return output
+
+  def _fetch_remarketing_lists_for_floodlights(
+      self, advertiser_id) -> Sequence[NamesInput]:
+    output: Sequence[NamesInput] = list()
+
+    for floodlight_activity_id in self.filter.floodlight_activity_ids:
+      values = self._fetch_entity_values(
+          root="remarketingLists",
+          fields="id, name",
+          request_params={
+              'advertiserId': advertiser_id,
+              'floodlightActivityId': floodlight_activity_id,
+          },
+          filter_function=self._no_filter)
+      output.extend(values)
+    return output
 
   def _fetch_entity_values(self, root: str, fields: str, request_params,
                            filter_function) -> Sequence[NamesInput]:
@@ -133,7 +175,7 @@ class CampaignManagerValidator(ProductValidator):
     return datetime.strptime(date_value,
                              _BQ_DATE_FORMAT).date() if date_value else None
 
-  def _filter_placement_row(self, row):
+  def _no_filter(self, row):
     return {
         'entity_id': row['id'],
         'entity_value': row['name'],
@@ -162,7 +204,6 @@ class CampaignManagerValidator(ProductValidator):
                            credentials=credentials)
 
 
-
 class CampaignManagerValidatorBuilder(BaseInterfacerBuilder):
 
   def __call__(self, spec: Mapping[str,
@@ -173,6 +214,7 @@ class CampaignManagerValidatorBuilder(BaseInterfacerBuilder):
           customer_owner_id=spec['customer_owner_id'],
           advertiser_ids=spec['advertiser_ids'],
           campaign_ids=spec['campaign_ids'],
+          floodlight_activity_ids=spec['floodlight_activity_ids'],
           min_start_date=spec['min_start_date'],
           max_start_date=spec['max_start_date'],
           min_end_date=spec['min_end_date'],

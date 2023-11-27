@@ -13,31 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# Update validator script.
-
-PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
-SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &>/dev/null && pwd)
-REGION=us-central1
-
-# URI=$(gcloud functions describe validator --gen2 --format="value(serviceConfig.uri)" --region=$REGION)
-URI=https://${REGION}-${PROJECT_ID}.cloudfunctions.net/validator
-ESCAPED_URI=$(sed 's/[&/\]/\\&/g' <<<"$URI")
-
-sed -i \
-  -e "s/const CLOUD_FUNCTION_URI = .*/const CLOUD_FUNCTION_URI = '${ESCAPED_URI}';/g" \
-  -e "s/const TAXONOMY_CLOUD_PROJECT_ID = .*/const TAXONOMY_CLOUD_PROJECT_ID = '${PROJECT_ID}';/g" \
-  ${SCRIPT_DIR}/CONFIG.js
-
-sed -i \
-  -e "s/\"urlFetchWhitelist\": .*/  \"urlFetchWhitelist\": \[\"${ESCAPED_URI}\"\]/g" \
-  ${SCRIPT_DIR}/appsscript.json
 
 echo "█████████████████████████████████████████████████████████████████████████
 ██                                                                     ██
-██                VALIDATOR SHEETS PLUGIN CODE UPDATED                 ██
+██  * MANUAL STEPS *                                                   ██
 ██                                                                     ██
+██  Admin Backend                                                      ██
+██                                                                     ██
+██  Make sure you move the Configurator sheet's Apps Script to the     ██
+██  same project you deployed to.                                      ██
+██                                                                     ██
+██  You may need to configure the OAuth Consent screen as well:        ██
+██    User Type: Internal.                                             ██
+██    Enter App name (e.g., 'Taxonomy Wizard').                        ██
+██    Enter Support and Contact email address (e.g., your email).      ██
 █████████████████████████████████████████████████████████████████████████
 
 "
-
-./manual_steps.sh

@@ -1,7 +1,7 @@
 /**
  * Description: Functions to configure Taxonomy Specification sets.
  * Contributors: blevitan@
- * Last updated: 2022-09-22
+ * Last updated: 2023-09-12
  * 
  * @OnlyCurrentDoc
  * 
@@ -30,40 +30,38 @@ const _BQ_DATASET_RANGE_NAME = 'TaxonomyBigQueryDataset';
 const _CLOUD_FUNCTION_API_ENDPOINT = 'https://cloudfunctions.googleapis.com/v2/';
 const _CONFIGURATOR_FUNCTION_NAME = 'configurator';
 
-
-
-
 const OBJECTS_TO_GENERATE_ = [{
   sheet: 'Taxonomy Fields',
   entityType: 'TaxonomyField',
   keyRow: 1,
-  keyColumnStart: 1,
-  keyColumnEnd: 5,
+  dataColumnStart: 1,
+  dataColumnEnd: 5,
   valueRowOffset: 2,
   filterColumn: 6,
 }, {
   sheet: 'Taxonomy Specs',
   entityType: 'TaxonomySpec',
   keyRow: 1,
-  keyColumnStart: 1,
-  keyColumnEnd: 11,
+  dataColumnStart: 1,
+  dataColumnEnd: 12,
   valueRowOffset: 2,
-  filterColumn: 12,
+  filterColumn: 13,
 }, {
   sheet: 'Taxonomy Field Mappings',
   entityType: 'TaxonomyDimension',
   keyRow: 1,
-  keyColumnStart: 1,
-  keyColumnEnd: 4,
+  dataColumnStart: 1,
+  dataColumnEnd: 4,
   valueRowOffset: 2,
   filterColumn: 5,
 }];
+
 
 function onOpen(e) {
   SpreadsheetApp.getUi()
     .createMenu('Taxonomy Wizard')
     .addItem('Overwrite All Specs', 'overwriteSpecs')
-    // TODO: Uncomment when implemented in Cloud Function.
+    // TODO(blevitan): Uncomment when implemented in Cloud Function.
     // .addItem('Add/Update Specs', 'updateSpecs')
     // .addItem('Delete All Specs', 'DeleteAllSpecs')
     .addSeparator()
@@ -72,14 +70,17 @@ function onOpen(e) {
     .addToUi();
 }
 
+
 function onInstall(e) {
   onOpen(e);
 }
+
 
 /** Authorizes user (if needed). */
 function authorizeUser() {
   ScriptApp.getOAuthToken();
 }
+
 
 /** Revokes authorization of current user. */
 function revokeUserAuthorization() {
@@ -88,19 +89,21 @@ function revokeUserAuthorization() {
 }
 
 
-function updateSpecs() {
-  generateAllConfigData("update");
-}
-
-
 function overwriteSpecs() {
   generateAllConfigData("overwrite");
 }
 
 
-function deleteAllSpecs() {
-  // TODO: Implement.
-}
+// TODO(blevitan): Uncomment when implemented in Cloud Function.
+// function updateSpecs() {
+//   generateAllConfigData("update");
+// }
+
+
+// TODO(blevitan): Uncomment when implemented in Cloud Function.
+// function deleteAllSpecs() {
+//   // TODO: Implement.
+// }
 
 /**
  * Generates the taxonomy configuration data from the spreadsheet.
@@ -125,7 +128,6 @@ function generateAllConfigData(action) {
     "data": data,
   }
 
-
   const configuratorEndpoint = SpreadsheetApp.getActiveSpreadsheet()
     .getRangeByName(_CLOUD_FUNCTION_ENDPOINT_RANGE_NAME)
     .getValue();
@@ -149,41 +151,46 @@ function generateAllConfigData(action) {
 /**
  * Generates config data from a sheet to be added to the cloud function `request` object.
  *
- * @param {!Object} def Object containing info on how to iterate through the sheet.
+ * @param {!Object} sheetDef Object containing info on how to iterate through the sheet.
  *     Object must have this structure: {
  *         sheet: str,  // Sheet name
            entityType: str,  // One of: 'TaxonomyField', 'TaxonomySpec', 'TaxonomyDimension'.
            keyRow: int,  // Row containing config key values.
-           keyColumnStart: int,  // First column containing key values.
-           keyColumnEnd: int,  // Last column containing key values.
+           dataColumnStart: int,  // First column containing data.
+           dataColumnEnd: int,  // Last column containing data.
            valueRowOffset: int, // How many rows after `keyRow` the first value is.
            filterColumn: int,  // Which column contains a boolean filter value. (True=keep value).
        }
  * 
  * @return {!Object} Entities to create config data for.
  */
-function getSheetConfigDataForRequest(sheetDefinition) {
+function getSheetConfigDataForRequest(sheetDef) {
+  const sht = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetDef.sheet);
+  const valueRowStart = sheetDef.keyRow + sheetDef.valueRowOffset;
+  const valueRowCount = sht.getLastRow() - valueRowStart + 1;
+  const colCount = sheetDef.dataColumnEnd - sheetDef.dataColumnStart + 1;
+
+  let keys = sht.getSheetValues(sheetDef.keyRow, sheetDef.dataColumnStart, 1, colCount)[0];
+  let values = sht.getSheetValues(valueRowStart, sheetDef.dataColumnStart, valueRowCount, colCount);
+  let filters = sht.getSheetValues(valueRowStart, sheetDef.filterColumn, valueRowCount, 1).flat();
+
   let entities = {
-    'type': sheetDefinition.entityType,
+    'type': sheetDef.entityType,
     'data': []
   };
-  const sht = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(sheetDefinition.sheet);
-  const lastRowOffset = sht.getLastRow() - sheetDefinition.keyRow + 1;
 
-  for (let rowOffset = sheetDefinition.valueRowOffset; rowOffset < lastRowOffset; rowOffset++) {
-    let kvObject = _keyValueObjectGenerator(
-      sht,
-      sheetDefinition.keyRow,
-      sheetDefinition.keyRow,
-      sheetDefinition.keyColumnStart,
-      sheetDefinition.keyColumnEnd,
-      rowOffset,
-      0,
-      sheetDefinition.filterColumn);
-    if (kvObject != null) {
-      entities.data.push(kvObject);
+  for (let r = 0; r < valueRowCount; r++) {
+    if (filters[r]) {
+      let obj = {};
+      for (let c = 0; c < colCount; c++) {
+        if (keys[c]!='') {
+          obj[keys[c]] = values[r][c];
+        }
+      }
+      entities.data.push(obj);
     }
   }
+
   return entities;
 }
 
@@ -284,50 +291,4 @@ function objectToQueryParams(queryParameters) {
       .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(v)}`)
       .join('&')
   );
-}
-
-
-/**
- * Generates a key-value object based on the sheet ranges determined by the parameters.
- * 
- * Iterates through a rectangular range determined by key_[row|col]_[start|end] to get
- * keys. Offsets by val_[row|col]_offset to get the values for those keys. Will ignore
- * empty key cells.
- *
- * @param {!int} payload Parameters to pass to the endpoint.
- * @param (!Object) sht Sheet to get data from.
- * @param (int) key_row_start Start row for keys.
- * @param (int) key_row_end End row for keys.
- * @param (int) key_col_start Start column for keys.
- * @param (int) key_col_end End column for keys.
- * @param (int) val_row_offset How far to offset row from key's cell to get value.
- * @param (int) val_col_offset How far to offset column from key's cell to get value.
- * @param (int) filter_column Filter out any row that has "False" in this column (only for row-based data).
- *
- * @return {!Object} Response from the specified endpoint
- */
-function _keyValueObjectGenerator(sht,
-  key_row_start,
-  key_row_end,
-  key_col_start,
-  key_col_end,
-  val_row_offset,
-  val_col_offset,
-  filter_column) {
-  var obj = {};
-
-  for (var r = key_row_start; r <= key_row_end; r++) {
-    if (filter_column != null && !sht.getRange(r + val_row_offset, filter_column).getValue()) {
-      return null;
-    }
-    // TODO: implement with getValues and an Array.prototype.filter.
-    for (var c = key_col_start; c <= key_col_end; c++) {
-      var key = sht.getRange(r, c).getValue();
-      if (key != '') {
-        obj[key] = sht.getRange(r + val_row_offset, c + val_col_offset).getValue();
-      }
-    }
-  }
-
-  return obj;
 }
