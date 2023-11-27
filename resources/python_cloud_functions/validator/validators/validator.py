@@ -19,6 +19,7 @@ from datetime import datetime
 from typing import Mapping, Sequence
 
 from google.cloud import bigquery
+from requests import HTTPError
 
 from base import BaseInterfacer, BaseInterfacerFactory, NamesInput, Primitives
 VALIDATOR_REGISTRATIONS_FILE = 'validators/validators.json'
@@ -52,7 +53,11 @@ class BaseValidator(BaseInterfacer):
     Returns:
         Sequence[NamesInput]: Data with validation messages.
     """
-    data_to_validate = self.fetch_data_to_validate()
+    try:
+      data_to_validate = self.fetch_data_to_validate()
+    except HTTPError as e:
+      raise ValueError(f'Could not retrieve data to validate. "{e.reason}"')
+
     unique_values = self._extract_unique_values(data_to_validate)
 
     query_template: str = self._fetch_validation_query_template()
@@ -178,7 +183,7 @@ class ProductValidatorFilter():
     customer_owner_id (str): Profile id for CM, account id for DV360, etc...
     advertiser_ids (Sequence[str | int]): List of advertiser ids.
     campaign_ids (Sequence[str | int]): List of campaign ids.
-    floodlightActivityId (str): Floodlight activity id.
+    floodlight_activity_ids (str): (Sequence[str | int]): List of Floodlight activity ids.
     min_start_date (datetime): Min start date.
     max_start_date (datetime): Max start date.
     min_end_date (datetime): Min end date.
@@ -187,6 +192,7 @@ class ProductValidatorFilter():
   customer_owner_id: str = field(kw_only=True)
   advertiser_ids: Sequence[str | int] = field(kw_only=True)
   campaign_ids: Sequence[str | int] = field(kw_only=True)
+  floodlight_activity_ids: Sequence[str | int] = field(kw_only=True)
   min_start_date: datetime = field(kw_only=True)
   max_start_date: datetime = field(kw_only=True)
   min_end_date: datetime = field(kw_only=True)
@@ -200,7 +206,7 @@ class ProductValidator(BaseValidator):
   entity_type: str = field(kw_only=True)
   filter: ProductValidatorFilter = field(kw_only=True)
 
-  # Overriden from Base class
+  # Overridden from Base class
   key_field_name: str = field(default='entity_value')
   base_row_columns: Sequence[str] = field(
       default=['name', 'product', 'customer_owner_id', 'entity_type'])
