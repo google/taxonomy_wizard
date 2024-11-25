@@ -113,6 +113,7 @@ class Specification:
   entity_type: EntityType = field(default=None)
   _advertiser_ids: str = field(default=None)
   _campaign_ids: str = field(default=None)
+  _floodlight_activity_ids: str = field(default=None)
   min_start_date: datetime.date = field(default=None)
   max_start_date: datetime.date = field(default=None)
   min_end_date: datetime.date = field(default=None)
@@ -123,6 +124,7 @@ class Specification:
   # Set in post_init
   advertiser_ids: list[int] = field(init=False, factory=list)
   campaign_ids: list[int] = field(init=False, factory=list)
+  floodlight_activity_ids: list[int] = field(init=False, factory=list)
 
   def __attrs_post_init__(self):
     if self._advertiser_ids:
@@ -130,6 +132,9 @@ class Specification:
 
     if self._campaign_ids:
       self.campaign_ids = [int(v) for v in self._campaign_ids.split(',')]
+
+    if self._floodlight_activity_ids:
+      self.floodlight_activity_ids = [int(v) for v in self._floodlight_activity_ids.split(',')]
 
     if self.field_structure_type_val.upper() == 'DELIMITED':
       self.field_structure_type = FieldStructureType.DELIMITED
@@ -207,6 +212,7 @@ class SpecificationSet:
         bigquery.SchemaField('entity_type', 'STRING', mode='NULLABLE'),
         bigquery.SchemaField('advertiser_ids', 'INT64', mode='REPEATED'),
         bigquery.SchemaField('campaign_ids', 'INT64', mode='REPEATED'),
+        bigquery.SchemaField('floodlight_activity_ids', 'INT64', mode='REPEATED'),
         bigquery.SchemaField('min_start_date', 'DATE', mode='NULLABLE'),
         bigquery.SchemaField('max_start_date', 'DATE', mode='NULLABLE'),
         bigquery.SchemaField('min_end_date', 'DATE', mode='NULLABLE'),
@@ -222,6 +228,7 @@ class SpecificationSet:
         'entity_type': spec.entity_type,
         'advertiser_ids': spec.advertiser_ids,
         'campaign_ids': spec.campaign_ids,
+        'floodlight_activity_ids': spec.floodlight_activity_ids,
         'min_start_date': self._to_bigquery_date(spec.min_start_date),
         'max_start_date': self._to_bigquery_date(spec.max_start_date),
         'min_end_date': self._to_bigquery_date(spec.min_end_date),

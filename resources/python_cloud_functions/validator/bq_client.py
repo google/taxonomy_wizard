@@ -47,6 +47,7 @@ class BqClient():
     uid: str = hashlib.md5(json.dumps(scopes).encode('utf-8')).hexdigest()
 
     if not self._clients.get(uid):
+      auth.load_credentials_from_file
       credentials, project = auth.default(scopes=scopes)
       self._clients[uid] = bigquery.Client(credentials=credentials,
                                            project=project)

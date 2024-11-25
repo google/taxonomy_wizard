@@ -81,6 +81,7 @@ def list_specs(project_id: str, dataset: str) -> _ListSpecsResponseJson:
 def validate_all_specs(project_id: str, dataset: str):
   validator_fields ='  advertiser_ids,\n'\
                     '  campaign_ids,\n'\
+                    '  floodlight_activity_ids,\n'\
                     '  min_start_date,\n'\
                     '  max_start_date,\n'\
                     '  min_end_date,\n'\
@@ -96,7 +97,11 @@ def validate_all_specs(project_id: str, dataset: str):
         project_id=project_id,
         dataset=dataset,
         bq_client=_bq_client.get())
-    results: Sequence[NamesInput] = validator.validate()
+    try:
+      results: Sequence[NamesInput] = validator.validate()
+    except ValueError as e:
+      logging.warning(f'Validation failed to run for spec {spec["name"]}: {e}')
+      continue
     validation_results.extend(results)
 
   persist_results(validation_results, project_id, dataset)
@@ -165,7 +170,11 @@ def validate_entity_values(spec_name: str, values: Sequence[NamesInput],
                                                  values_to_validate=values,
                                                  base_row_data={})
 
-  results = validator.validate()
+  try:
+    results = validator.validate()
+  except ValueError as e:
+    logging.warning(f'Validation failed to run for spec {spec_name}: {e}')
+    raise e
 
   return {'results': results}
 
